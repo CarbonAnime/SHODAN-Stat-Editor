@@ -1653,11 +1653,11 @@ end
 local fields = {}       -- key -> field
 local defaults = {}     -- key -> value before this mod first wrote it
 
-local function field_at(kind, offset, storage, limit)
-    local key = kind .. ':' .. offset
+local function field_at(kind, offset, storage, limit, bit)
+    local key = bit and (kind .. ':' .. offset .. ':' .. bit) or (kind .. ':' .. offset)
     local f = fields[key]
     if not f then
-        f = { key = key, kind = kind, offset = offset, storage = storage, limit = limit, users = {} }
+        f = { key = key, kind = kind, offset = offset, storage = storage, limit = limit, bit = bit, users = {} }
         fields[key] = f
     end
     return f
@@ -1689,6 +1689,11 @@ local function read_field(f)
     end
     if f.storage == 'grenade' then
         return KINDS[TYPES.throwable].read_entity(api.read(entry.copies[1] + HEADER_BYTES + f.offset, 8))
+    end
+    if f.storage == 'bit' then   -- one bit of a little-endian half word (a projectile +244 flags)
+        local half = api.read(entry.copies[1] + HEADER_BYTES + f.offset, 2)
+        if not half or #half < 2 then return nil end
+        return math.floor((half:byte(1) + half:byte(2) * 256) / 2 ^ f.bit) % 2
     end
     if f.storage == 'flag' then   -- a bool byte
         local b = api.read(entry.copies[1] + HEADER_BYTES + f.offset, 1)
@@ -1731,6 +1736,7 @@ local function write_field(f, value)
     if f.most and value > f.most then value = f.most end
     local bytes, done = nil, {}
     if f.storage == 'tier' then bytes = KINDS[TYPES.destruction].bytes(f, value, read_field(f))
+    elseif f.storage == 'bit' then bytes = string.char(0, 0)   -- filled per copy: its other bits stay
     else bytes = encode(f, value) end
     if not bytes then return false, f.storage == 'tier' and 'no demolition tier there' or 'unknown grenade selection' end
     if f.storage == 'grenade' and value ~= 0 then
@@ -1739,9 +1745,17 @@ local function write_field(f, value)
         ok, why = KINDS[TYPES.throwable].ensure_assets(value)
         if not ok then return false, why end
     end
+    local width = f.storage == 'bit' and 2 or #bytes
     for _, block in ipairs(entry.copies) do
         local at = block + HEADER_BYTES + f.offset
-        local before = api.read(at, #bytes)
+        local before = api.read(at, width)
+        if f.storage == 'bit' and before and #before == 2 then
+            local step = 2 ^ f.bit
+            local half = before:byte(1) + before:byte(2) * 256
+            local want = value >= 0.5 and 1 or 0
+            half = half + (want - math.floor(half / step) % 2) * step
+            bytes = string.char(half % 256, math.floor(half / 256) % 256)
+        end
         if not before then
             for _, undo in ipairs(done) do api.write(undo[1], undo[2]) end
             return false, 'read failed at ' .. hex(at)
@@ -2336,6 +2350,7 @@ local function resolve_gun(weapon, key)
         end
     end
     local blasts = {}
+    local blast_fallback = nil   -- a shot's explosion id rows: where its velocity switches go with no blast
     -- the ids of rows from..to, taken by `prefix` .. their id past `listed` (its prefix): another shot's
     -- for the same memory (listed once), kept so saved values and presets that name them still apply
     local function alias_rows(from, to, listed, prefix)
@@ -2413,13 +2428,29 @@ local function resolve_gun(weapon, key)
             last_id.after_h = #last_id.after * 16 + 6
         end
         local first = #blasts
-        if impact and impact > 0 then blasts[#blasts + 1] = { id = impact, prefix = idp .. 'blast', section = xsection, damage = true } end
+        if impact and impact > 0 then blasts[#blasts + 1] = { id = impact, prefix = idp .. 'blast', section = xsection, damage = true, p = p } end
         if expiry and expiry > 0 and expiry ~= impact then
             blasts[#blasts + 1] = { id = expiry, prefix = idp .. 'expiry', section = #blasts > first and (xsection .. ' (expiry)') or xsection,
-                                    damage = true }
+                                    damage = true, p = p }
         end
+        blast_fallback = { section = idsec, p = p, prefix = idp }
+    end
+    -- the projectile's two velocity switches (one bit each of its +244 flags, a half word): whether the round
+    -- keeps the velocity of whoever fired it, and whether the blast it sets off travels with it
+    local function inherit_rows(section, p, prefix)
+        local row = add_row(weapon, section, prefix .. 'inherit_velocity', 'Inherit velocity', 'bit',
+                            { { id = prefix .. 'inherit_velocity',
+                                field = field_at(T_PROJECTILE, p + 244, 'bit', 1, 0) } }, 0, 1, 1, 1)
+        row.after = { '1: the round keeps the velocity of whoever fired it; 0: it starts from rest.' }
+        row.after_h = #row.after * 16 + 6
+        local other = add_row(weapon, section, prefix .. 'explosions_inherit_velocity', 'Explosions inherit velocity', 'bit',
+                              { { id = prefix .. 'explosions_inherit_velocity',
+                                  field = field_at(T_PROJECTILE, p + 244, 'bit', 1, 5) } }, 0, 1, 1, 1)
+        other.after = { '1: the blast this round sets off travels with it; 0: it stays where the round hit.' }
+        other.after_h = #other.after * 16 + 6
     end
     local function explosion_rows()
+        local placed = false   -- the last explosion's section ends with the velocity switches
         for _, blast in ipairs(blasts) do
             local xrow = tables[T_EXPLOSION] and tables[T_EXPLOSION].index[blast.id]
             local before = xrow and exploded[xrow]
@@ -2447,7 +2478,7 @@ local function resolve_gun(weapon, key)
                 -- the shrapnel it throws: how many pieces (+80) and the projectile every piece is (+84, a
                 -- ProjectileSettings id), so a blast's pieces fly, hit and explode as that shot does (the
                 -- AC-8 Autocannon's flak, the RL-77 Airburst Rocket Launcher's shells)
-                local fragsec = blast.section == 'Explosion' and 'Shrapnel' or (blast.section .. ' shrapnel')
+                local fragsec = blast.section   -- the blast's own section: its pieces and the two switches end it
                 local piece_row
                 local count_row = add_row(weapon, fragsec, blast.prefix .. '_frag_count', 'Shrapnel pieces', 'u32',
                                           { part(blast.prefix .. '_frag_count', T_EXPLOSION, xrow + 80, 'u32', 100000) },
@@ -2462,6 +2493,11 @@ local function resolve_gun(weapon, key)
                 piece_row.choice = 'shrapnel'
                 piece_row.after = { 'The projectile each piece is (its own flight, damage and explosion).' }
                 piece_row.after_h = #piece_row.after * 16 + 6
+                -- a blast that is there ends the section with the shot's two velocity switches
+                if blast.p and blast == blasts[#blasts] then
+                    inherit_rows(blast.section, blast.p, blast.prefix .. '_')
+                    placed = true
+                end
                 -- the arc it makes (explosion +120 arc type -> arc row: +8 range, +28 chain length, +32 chain
                 -- split, +36 damage row), as a throwable's: the GL-52 De-Escalator's grenade
                 local arc = tables[TYPES.arc] and tables[TYPES.arc].index[read_field(field_at(T_EXPLOSION, xrow + 120, 'u32', 100000)) or -1]
@@ -2488,7 +2524,10 @@ local function resolve_gun(weapon, key)
                 exploded[xrow] = { from = from, to = #weapon.rows, prefix = blast.prefix }
             end
         end
-        blasts = {}
+        if blast_fallback and not placed then
+            inherit_rows(blast_fallback.section, blast_fallback.p, blast_fallback.prefix)
+        end
+        blast_fallback, blasts = nil, {}
     end
     weapon.missile = fire and KINDS[TYPES.seeking].fired(fire)
     if prow then projectile_rows(prow, '', 'Projectile', 'Explosion') end
@@ -4655,6 +4694,8 @@ local function apply_config(deadline)
                     if p.field.storage == 'grenade' then p.field.pending_value = nil end
                 end
                 state.applied = state.applied + 1
+                -- a saved explosion id decides which rows there are: rebuild once it is in the table
+                if parts[1].row and parts[1].row.choice == 'explosion' then MOD.rebuild(weapon) end
                 if parts[1].id ~= o.id then   -- saved under an old id: kept under the attachments' own from now on
                     set_override(weapon, { id = o.id }, nil)
                     for _, p in ipairs(parts) do set_override(weapon, p, unless_default(o.value, default_of(p.field))) end
@@ -5345,6 +5386,24 @@ local function select_weapon(weapon)
     end
 end
 
+-- The rows come from the table as it was: a change that decides which rows there are (an explosion id: no
+-- explosion, no explosion rows and no shrapnel) rebuilds the weapon, keeping the row under the cursor.
+function MOD.rebuild(weapon)
+    local here = weapon and weapon.rows[ui.row]
+    local id = here and here.parts[1] and here.parts[1].id
+    if not weapon then return end
+    ui.value = nil
+    resolve(weapon)
+    ui.row, ui.scroll, ui.last_visible = 1, 1, nil
+    for n, row in ipairs(weapon.rows) do
+        if id and row.parts[1] and row.parts[1].id == id then
+            ui.row = n
+            break
+        end
+    end
+    if ui.row > #weapon.rows then ui.row = math.max(1, #weapon.rows) end
+end
+
 local function change(row, delta_sign, big, exact)
     local weapon = ui.weapon
     local current = row_value(row)
@@ -5395,6 +5454,7 @@ local function change(row, delta_sign, big, exact)
                 else log('write refused: ' .. weapon.name .. ' ' .. p.id .. ': ' .. why) end
             end
             ui.version = ui.version + 1
+            MOD.rebuild(weapon)   -- no explosion, no explosion rows and no shrapnel: rebuild to match
             return
         end
         if row.choice == 'shrapnel' then
