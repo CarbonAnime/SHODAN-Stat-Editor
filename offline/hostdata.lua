@@ -131,10 +131,20 @@ function M.relocate()
 end
 
 -- ---------------------------------------------------------------- what changed
--- a value with decimals, between 1e-4 and 1e7: what a hash correction can move by a few units in the last place
-local function decimal(p, o)
+-- a float read off a pointer: a plain read never answers nil, but a scan that reaches a buffer the
+-- engine moves under it can, and one nil must not stop the whole install: no value is no candidate
+local function float_at(p, o)
     local v = ffi.cast('float *', p + o)[0]
-    return v == v and math.abs(v) >= 1e-4 and math.abs(v) < 1e7 and u32(p, o) >= 0x38D1B717
+    if v == nil then return nil end
+    v = tonumber(v)
+    if v == nil or v ~= v then return nil end
+    return v
+end
+-- a value with decimals, between 1e-4 and 1e7: what a hash correction can move by a few units in the
+-- last place
+local function decimal(p, o)
+    local v = float_at(p, o)
+    return v ~= nil and math.abs(v) >= 1e-4 and math.abs(v) < 1e7 and u32(p, o) >= 0x38D1B717
 end
 
 -- a record of whole numbers may hold a word that only looks like a float: the fields around it tell - a value
@@ -143,9 +153,9 @@ local function crowded(p, n, at, blocked, resolved)
     local around = 0
     for k = -32, 32, 4 do
         local o = at + k
-        if k ~= 0 and o >= 0 and o + 4 <= n and not blocked[o] and not (resolved and resolved[o])
-           and decimal(p, o) and math.abs(ffi.cast('float *', p + o)[0]) >= 1e-3 then
-            around = around + 1
+        if k ~= 0 and o >= 0 and o + 4 <= n and not blocked[o] and not (resolved and resolved[o]) then
+            local v = decimal(p, o) and float_at(p, o)
+            if v and math.abs(v) >= 1e-3 then around = around + 1 end
         end
     end
     return around >= 2
@@ -155,6 +165,7 @@ end
 -- correction nothing to work with: borrow the nearest decimal value of the same record (a projectile's Caliber,
 -- its Drag...) and the correction moves it by under 0.05 %. `words`: the 4-byte words that changed.
 local function borrowing(f, p, n, words)
+    if type(p) ~= 'cdata' then return {} end
     local blocked = {}
     for _, h in ipairs(G.headers(p, n)) do for o = h.at, h.at + 23 do blocked[o] = true end end
     local starts = {}
@@ -174,7 +185,8 @@ local function borrowing(f, p, n, words)
                     for k = at, at + 3 do
                         if blocked[k] or (f.resolved and f.resolved[k]) then free = false; break end
                     end
-                    if free and decimal(p, at) and math.abs(ffi.cast('float *', p + at)[0]) >= 1e-3
+                    local v = free and decimal(p, at) and float_at(p, at)
+                    if v and math.abs(v) >= 1e-3
                        and crowded(p, n, at, blocked, f.resolved) then
                         out[#out + 1] = at
                         if #out >= 6 then return out end
@@ -211,36 +223,45 @@ local function changes(f)
     -- floats among the changed words (a salt for one-table files): a value with decimals between 1e-4 and 1e7
     local floats = {}
     for o in pairs(words) do
-        local v = ffi.cast('float *', orig + o)[0]
+        local v = float_at(orig, o)
         local i = u32(orig, o)
-        if v == v and math.abs(v) >= 1e-4 and math.abs(v) < 1e7 and i >= 0x38D1B717 then floats[#floats + 1] = o end
+        if v and math.abs(v) >= 1e-4 and math.abs(v) < 1e7 and i >= 0x38D1B717 then floats[#floats + 1] = o end
     end
     table.sort(floats)
     local borrowed
     if #floats == 0 then
-        floats = borrowing(f, orig, n, words)
+        local ok, list = pcall(borrowing, f, orig, n, words)
+        floats = ok and list or {}
         borrowed = #floats > 0 and floats or nil
     end
     return orig, n, changed, floats, borrowed
 end
 
 -- every file whose plain text differs from its original: { name, plain, n, bytes, floats, borrowed, hash }
+-- and the files that could not be read at all ({ name, why }): one unreadable file must not stop the rest
 function M.diff()
-    local out = {}
+    local out, problems = {}, {}
     for name, f in pairs(M.files) do
-        local plain, n, count, floats, borrowed = changes(f)
-        if plain then out[#out + 1] = { name = name, plain = plain, n = n, bytes = count, floats = floats,
-                                        borrowed = borrowed, hash = f.hash } end
+        local read, plain, n, count, floats, borrowed = pcall(changes, f)
+        if not read then
+            problems[#problems + 1] = { name = name, why = tostring(plain) }
+        elseif plain then
+            out[#out + 1] = { name = name, plain = plain, n = n, bytes = count, floats = floats,
+                              borrowed = borrowed, hash = f.hash }
+        end
     end
     table.sort(out, function(x, y) return x.name < y.name end)
-    return out
+    table.sort(problems, function(x, y) return x.name < y.name end)
+    return out, problems
 end
 
 -- seal one changed file: { name, sealed } or nil, why
 function M.build(change, log)
-    local ok, why = G.correct(change.plain, change.n, change.hash, change.floats, log)
+    local called, ok, why = pcall(G.correct, change.plain, change.n, change.hash, change.floats, log)
+    if not called then G.free(change.plain); return nil, tostring(ok) end
     if not ok then G.free(change.plain); return nil, why end
-    local sealed = G.seal(change.plain, change.n)
+    local sealed_at, sealed = pcall(G.seal, change.plain, change.n)
+    if not sealed_at then G.free(change.plain); return nil, tostring(sealed) end
     local back, m = G.open_sealed(sealed)
     local good = back and m == change.n and ffi.C.memcmp(back, change.plain, m) == 0 and G.murmur64(back, m) == change.hash
     if back then G.free(back) end

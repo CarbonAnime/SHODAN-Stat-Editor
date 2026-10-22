@@ -3710,7 +3710,13 @@ function MOD.record_users.of()
         end
     end
     for _, map in ipairs({ users.projectile, users.explosion }) do
-        for _, list in pairs(map) do table.sort(list, function(a, b) return a:lower() < b:lower() end) end
+        for _, list in pairs(map) do
+            table.sort(list, function(a, b)
+                local ea, eb = a:match('^[Ee]/') ~= nil, b:match('^[Ee]/') ~= nil
+                if ea ~= eb then return eb end   -- an emplacement's own mount is not the weapon itself
+                return a:lower() < b:lower()
+            end)
+        end
     end
     if state.phase == 'ready' then MOD.record_users.cache = users end
     return users
@@ -4696,23 +4702,25 @@ MOD.record_tabs.kind['Expl. ids'], MOD.record_tabs.prefix['Expl. ids'] = T_EXPLO
 MOD.record_tabs.kind['Status'], MOD.record_tabs.prefix['Status'] = T_STATUS, 'F3'
 for _, tab in ipairs(MOD.record_tabs.order) do MOD.record_tabs.set[tab] = true end
 state.record_tabs = MOD.record_tabs   -- the record pages, so a headless test can read them
--- A record page's title: its id, the weapon that comes with it (short: 'GL-21', 'AC-8 +2'), its size.
+-- A record page's title: the full name of the weapon that comes with it, then its id. A record no weapon
+-- of this list uses keeps its id and its size instead: a list of records is read at a glance.
 function MOD.record_tabs.name(tab, id, at)
     local users = MOD.record_users.of()
-    local short = MOD.record_users.short(tab == 'Proj. ids' and users.projectile[id]
-                                      or tab == 'Expl. ids' and users.explosion[id])
-    local name = '#' .. id
-    if short then name = name .. ' · ' .. short end
+    local names = tab == 'Proj. ids' and users.projectile[id]
+               or tab == 'Expl. ids' and users.explosion[id]
+    local who = names and MOD.record_users.long(names, 1)
+    local size
     if tab == 'Proj. ids' then
         local calibre = read_field(field_at(T_PROJECTILE, at + 24, 'f32', 100000))
-        if calibre then name = name .. string.format(' / %.1f mm', calibre) end
+        if calibre then size = string.format('%.1f mm', calibre) end
     elseif tab == 'Expl. ids' then
         local outer = read_field(field_at(T_EXPLOSION, at + 20, 'f32', 100000))
-        if outer then name = name .. string.format(' / %.1f m', outer) end
+        if outer then size = string.format('%.1f m', outer) end
     else
-        name = name .. ' / ' .. (KINDS[T_STATUS].names[id] or 'status')
+        size = KINDS[T_STATUS].names[id] or 'status'
     end
-    return name
+    if who then return who .. ' · #' .. id end
+    return '#' .. id .. (size and (' / ' .. size) or '')
 end
 -- Under the title: every weapon that comes with the record (a shot) or sets it off (an explosion).
 function MOD.record_tabs.about(tab, id)
@@ -5818,7 +5826,11 @@ local function draw(width, height)
         if selected then rect(16, y, 318, 25, color(90, 74, 8), 951)
         elseif ui.hover == key then rect(16, y, 318, 25, color(40, 52, 64), 951) end
         local changed = modified(weapon)
-        text((changed and '* ' or '') .. weapon.name, 24, y + 4, 16, changed and GOLD or WHITE, searching and 226 or 302)
+        local label, room, size = (changed and '* ' or '') .. weapon.name, searching and 226 or 302, 16
+        if weapon.id then   -- a record page: its full name matters more than the size of the line
+            while size > 11 and width(label, size) > room do size = size - 1 end
+        end
+        text(label, 24, y + 4, size, changed and GOLD or WHITE, room)
         region(key, 16, y, 318, 25)
     end
     local py = 96 + LIST_ROWS * 26 + 8
@@ -5938,7 +5950,9 @@ local function draw(width, height)
     elseif not weapon then
         text('Choose a weapon on the left.', x0, 100, 18, MUTED)
     else
-        text(weapon.name, x0, 94, 22, GOLD, W - x0 - 20)
+        local tsize = 22
+        while tsize > 13 and width(weapon.name, tsize) > W - x0 - 20 do tsize = tsize - 1 end
+        text(weapon.name, x0, 94, tsize, GOLD, W - x0 - 20)
         local y, section = 126, nil
         if weapon.note ~= '' then
             text(weapon.note, x0, 122, 14, WARN, W - x0 - 20)

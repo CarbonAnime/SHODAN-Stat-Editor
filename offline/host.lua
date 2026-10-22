@@ -188,8 +188,17 @@ local function main()
     local function install()
         if I.game_running() then say('Helldivers 2 is running: close it, then Install.', WARN); return end
         busy('Installing: finding what changed...')
-        local changes = D.diff()
+        local changes, problems = D.diff()
         local writes, made, back, nudged = {}, 0, 0, 0
+        if problems and #problems > 0 then
+            for _, c in ipairs(changes) do G.free(c.plain) end
+            bar.busy = nil
+            local first = problems[1]
+            log('install stopped: ' .. first.name .. ': ' .. first.why)
+            say('Not installed: ' .. first.name .. ' could not be read (' .. tostring(first.why)
+                .. '). Nothing was changed.', WARN)
+            return
+        end
         for k, c in ipairs(changes) do
             busy(string.format('Installing: preparing %s (%d of %d)...', c.name, k, #changes))
             local sealed, why = D.build(c, function(text) log(c.name .. ': ' .. text); shim.pump() end)
