@@ -8304,6 +8304,28 @@ local function resolve_gun(weapon, key)
         proj('pen_slowdown', 'Penetration slowdown', 64, 100, 0.05, 0.25)
         local impact = read_field(field_at(T_PROJECTILE, p + 144, 'u32', 100000))
         local expiry = read_field(field_at(T_PROJECTILE, p + 156, 'u32', 100000))
+        -- the ids above, as rows: which ExplosionSettings record the shot sets off where it hits (+144) and
+        -- where it expires (+156); 0 = none. The explosion's own rows (damage, radii, arc) are built from
+        -- the id the panel was opened with, so a newly chosen one shows there once the panel is reopened.
+        local idsec = section .. ' explosion id'
+        local function blast_id(id, label, offset)
+            local row = add_row(weapon, idsec, idp .. id, label, 'u32',
+                                { { id = idp .. id, field = field_at(T_PROJECTILE, p + offset, 'u32', 100000) } },
+                                0, 100000, 1, 10)
+            row.choice = 'explosion'
+            row.note = function()
+                return 'sets off: ' .. KINDS[T_EXPLOSION].label(read_field(row.parts[1].field))
+                       .. '. - / + : another explosion, 0: none'
+            end
+            return row
+        end
+        local impact_row = impact and blast_id('blast_id', 'Impact explosion (id)', 144)
+        local expiry_row = expiry and blast_id('expiry_blast_id', 'Expiry explosion (id)', 156)
+        if impact_row then
+            impact_row.after = { "The explosion's rows (damage, radii, arc, under this one) are the",
+                                 'explosion the panel opened with: reopen it to see a newly chosen one.' }
+            impact_row.after_h = #impact_row.after * 16 + 6
+        end
         local first = #blasts
         if impact and impact > 0 then blasts[#blasts + 1] = { id = impact, prefix = idp .. 'blast', section = xsection, damage = true } end
         if expiry and expiry > 0 and expiry ~= impact then
@@ -9815,6 +9837,48 @@ KINDS[T_PROJECTILE].step = function(id, n)
     return list[math.max(1, math.min(#list, at + n))].id
 end
 
+-- Explosion choices (KINDS[T_EXPLOSION].choices): none, then every ExplosionSettings record the game
+-- has, by id. A projectile's explosion ids are picked from here: one weapon's shot can be given another's
+-- blast, or none. The label is what the id is worth on its own (outer radius, damage / durable damage).
+KINDS[T_EXPLOSION].label = function(id)
+    if not id or id <= 0 then return 'none (no explosion)' end
+    local xrow = tables[T_EXPLOSION] and tables[T_EXPLOSION].index[id]
+    if not xrow then return 'explosion ' .. tostring(id) .. ' (not in this game build)' end
+    local text = '#' .. id
+    local outer = read_field(field_at(T_EXPLOSION, xrow + 20, 'f32', 100000))
+    if outer then text = text .. string.format(' · %.1f m', outer) end
+    local hit = read_field(field_at(T_EXPLOSION, xrow + 4, 'u32', 100000))
+    local drow = hit and hit > 0 and tables[T_DAMAGE] and tables[T_DAMAGE].index[hit]
+    local direct = drow and read_field(field_at(T_DAMAGE, drow + 4, 'u32', 100000))
+    local durable = drow and read_field(field_at(T_DAMAGE, drow + 8, 'u32', 100000))
+    if direct then text = text .. string.format(' · %d / %d', direct, durable or 0) end
+    return text
+end
+
+KINDS[T_EXPLOSION].list_choices = function()
+    local spec, list = KINDS[T_EXPLOSION], { { id = 0, label = 'none (no explosion)' } }
+    local ids = {}
+    for id in pairs(tables[T_EXPLOSION] and tables[T_EXPLOSION].index or {}) do
+        if type(id) == 'number' and id > 0 then ids[#ids + 1] = id end
+    end
+    table.sort(ids)
+    for _, id in ipairs(ids) do list[#list + 1] = { id = id, label = spec.label(id) } end
+    local by = {}
+    for k, choice in ipairs(list) do by[choice.id] = k end
+    spec.choices, spec.by_id = list, by
+    return list
+end
+
+-- The explosion id `n` choices on from `id` (from either end when `id` is not one).
+KINDS[T_EXPLOSION].step = function(id, n)
+    local spec = KINDS[T_EXPLOSION]
+    local list = spec.choices or spec.list_choices()
+    if #list == 0 then return id end
+    local at = spec.by_id and spec.by_id[id]
+    at = at or (n > 0 and 0 or #list + 1)
+    return list[math.max(1, math.min(#list, at + n))].id
+end
+
 -- ProjectileWeaponComponent +40 is a full 64-bit entity reference. Keep both
 -- halves together through read/write/reset/presets; a Lua number cannot hold the hash.
 -- Use the grenade entity and native release/activation lifecycle. Special grenade
@@ -9852,6 +9916,7 @@ local function resolve_some(progress, deadline)
         for _, f in pairs(fields) do f.users = {} end
         KINDS[TYPES.custom].cache = {}
         KINDS[TYPES.throwable].prepare_grenades()
+        KINDS[T_EXPLOSION].choices, KINDS[T_EXPLOSION].by_id = nil, nil   -- a rescan may have changed the tables
     end
     while progress.next <= #weapons do
         resolve(weapons[progress.next])
@@ -9860,6 +9925,7 @@ local function resolve_some(progress, deadline)
     end
     if progress.next <= #weapons then return false end
     KINDS[T_PROJECTILE].list_choices()
+    KINDS[T_EXPLOSION].list_choices()
     local usable, strats = 0, 0
     state.attachments, state.throwables, state.passives, state.vehicles = 0, 0, 0, 0
     for _, weapon in ipairs(weapons) do
@@ -10804,6 +10870,24 @@ local function change(row, delta_sign, big, exact)
                 set_override(weapon, p, unless_default(target, default_of(p.field)))
             end
             if not ok then ui.message = { text = why, till = api.now() + 4 } end
+            ui.version = ui.version + 1
+            return
+        end
+        if row.choice == 'explosion' then
+            -- an explosion id: none (0) or any ExplosionSettings record of this build
+            local target = exact and math.floor(exact + 0.5)
+                           or KINDS[T_EXPLOSION].step(current, delta_sign * (big and 10 or 1))
+            if target ~= 0 and not (tables[T_EXPLOSION] and tables[T_EXPLOSION].index[target]) then
+                ui.message = { text = 'No explosion ' .. tostring(target) .. ' in this game build.', till = api.now() + 4 }
+                return
+            end
+            if target == current then return end
+            for _, p in ipairs(row.parts) do
+                local d = default_of(p.field)
+                local ok, why = write_field(p.field, target)
+                if ok then set_override(weapon, p, unless_default(target, d))
+                else log('write refused: ' .. weapon.name .. ' ' .. p.id .. ': ' .. why) end
+            end
             ui.version = ui.version + 1
             return
         end

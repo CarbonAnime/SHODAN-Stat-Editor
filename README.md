@@ -23,6 +23,7 @@ no longer works; SSEO replaces it. See [In-game version](#in-game-version).
 | Damage | Damage, durable damage, armor penetration (direct, slight, large and extreme angle), demolition force, stagger force, push force (from the bullet, beam, flame, arc or melee strike) |
 | Projectile | Projectiles per shot, velocity, drag factor, penetration slowdown |
 | Explosion | Inner, outer and shockwave radius of the blast (grenade launchers and pistols, EATs, recoilless, Autocannon, Eruptor and every other weapon with explosive rounds); the Breaching Hammer's explosion also has its full damage set |
+| Explosion id | Which explosion a round sets off when it hits something (impact) and when it expires (expiry): any explosion in this build, or none at all. The blast's own rows (damage, radii, arc) then come from the explosion you pick |
 | Arc | Range, chain length, chain split (Arc Thrower, Blitzer, K-9 Guard Dog, Tesla Tower) |
 | Burning / Gas | How much fire or gas each hit applies (flamethrowers, Coyote, Hyena, incendiary shotguns, lasers, EAT-700, gas weapons); burn / gas damage, armor penetration and duration |
 | Fire | Fire rate (every fire mode the weapon has) |
@@ -249,11 +250,29 @@ clip sizes and unlocking unused items (M-104 Incinerator FRV, P-41 Ombudsman, G-
 LAS-22 Shear) need the running game and exist only there. `src/stat_editor.lua` is the in-game
 version's source.
 
+## AI agents (MCP)
+
+`offline/mcp/` holds a Model Context Protocol server that reads and writes the same values from a
+shell or an AI client, without the window: list the weapons, read every value of one, pick the
+explosion a round sets off, change a field, save, restore, verify. Python 3 is all it needs, plus the
+`libsodium.dll` and `shodan_hash.dll` the release already ships.
+
+```
+python offline\mcp\stat_editor_mcp.py selftest
+python offline\mcp\stat_editor_mcp.py weapon "GL-21 Grenade Launcher"
+python offline\mcp\stat_editor_mcp.py set-explosion "GL-21 Grenade Launcher" impact 361 --save
+```
+
+Run it with no arguments to serve MCP on stdin/stdout; the
+[README there](offline/mcp/README.md) has the client registration, the ten tools and what a save
+does to a checksum.
+
 ## Building from source
 
 `offline/` holds SSEO: `host.lua` (the program), `engine_shim.lua` (its window), `gamedata.lua`
 (reading and sealing the game's data files), `install.lua` (Install / Restore) and `launcher/`
 (the .exe, and `shodan_hash.dll` for the checksums). The panel is `src/stat_editor_offline.lua`.
+`offline/mcp/` is the MCP server (plain Python, nothing to build).
 
 1. Build [LuaJIT](https://luajit.org) 2.1 (`msvcbuild.bat`), then `offline\launcher\build.bat`
    with `LJ` set to LuaJIT's `src` folder (Visual Studio 2022 Build Tools).
