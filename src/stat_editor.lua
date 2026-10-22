@@ -94,6 +94,238 @@ MOD.item_names = {
     [0xFA6A7DA3] = '12g Scatter Shot',
     [0xFB7A777E] = '9x20mm High Velocity',
 }
+
+-- The game own name of a projectile record, by its type id: the text the game shows for the round.
+-- It comes from the .strings resources (a row carries localisation ids at +4 and +8, build 25988413);
+-- the panel keeps a copy because it cannot read .strings at run time. 225 of the 355 records have one -
+-- the rest are internal slugs with no text and are shown by id alone.
+MOD.round_names = {
+    [1] = [[10g Sabot]],
+    [3] = [[12x25mm Full Metal Jacket]],
+    [4] = [[9x20mm Plasma]],
+    [5] = [[Laser]],
+    [6] = [[110mm Standard Rocket Mk2]],
+    [8] = [[5.5x50mm Penetrator]],
+    [11] = [[SEAF Artillery: Smoke]],
+    [12] = [[Shrapnel]],
+    [13] = [[15x100mm Thermite]],
+    [14] = [[120mm HE Cannon Round]],
+    [15] = [[10g Scatter Shot]],
+    [16] = [[12x25mm Full Metal Jacket]],
+    [17] = [[23mm HE Cannon]],
+    [18] = [[Large Plasma Bolt]],
+    [20] = [[13x40mm Magnum]],
+    [21] = [[15x100mm Toxic]],
+    [22] = [[15x100mm Plasma]],
+    [25] = [[40mm HE Mortar]],
+    [26] = [[Laser]],
+    [27] = [[110mm Airburst Cannon Round Mk2]],
+    [28] = [[23mm HE Cannon]],
+    [29] = [[13x40mm Hollow Point]],
+    [30] = [[110mm E.M.S. Cannon Round Mk2]],
+    [32] = [[75mm HEAT Grenade]],
+    [36] = [[9x70mm Socom Assassin]],
+    [37] = [[85mm High-Explosive Grenade]],
+    [38] = [[10g High Velocity Sabot]],
+    [39] = [[12x25mm Full Metal Jacket]],
+    [41] = [[15x100mm High Explosive]],
+    [43] = [[23mm HE Cannon]],
+    [47] = [[15x100mm High Velocity]],
+    [48] = [[10g Tri-Ball]],
+    [50] = [[8x60mm Full Metal Jacket]],
+    [57] = [[12x25mm Plasma]],
+    [58] = [[Large Plasma Bolt]],
+    [60] = [[5.5x50mm Ripper]],
+    [61] = [[Flames]],
+    [67] = [[Nuke]],
+    [71] = [[Flames Mk2]],
+    [72] = [[Small Plasma Bolt]],
+    [73] = [[SEAF Artillery: Explosive]],
+    [74] = [[23mm HE Cannon]],
+    [75] = [[10g Magnum Triball]],
+    [76] = [[110mm E.M.S. Cannon Round]],
+    [77] = [[23mm HE Cannon]],
+    [78] = [[9x20mm High Velocity]],
+    [79] = [[23mm HE Cannon]],
+    [80] = [[Cluster Bomb]],
+    [82] = [[380mm HE Cannon Round]],
+    [84] = [[110mm Standard Rocket]],
+    [85] = [[12.5mm Standard Rifle Rounds]],
+    [86] = [[380mm HE Cannon Round]],
+    [87] = [[40mm HEAT Grenade]],
+    [93] = [[12g Bugshot]],
+    [94] = [[SEAF Artillery: Static Field]],
+    [95] = [[380mm HE Cannon Round]],
+    [97] = [[8x60mm Explosive]],
+    [98] = [[CLUSTER BOMB]],
+    [99] = [[13x40mm Ripper]],
+    [101] = [[SEAF Artillery: Mini Nuke]],
+    [102] = [[380mm HE Cannon Round]],
+    [103] = [[8x60mm Devastator]],
+    [106] = [[9x70mm Super Uranium Core]],
+    [107] = [[12x25mm Hollow Point]],
+    [110] = [[8x60mm Liberty Fire]],
+    [111] = [[12x25mm Ripper]],
+    [112] = [[75mm HEAT Grenade]],
+    [113] = [[12.5mm EIT Rounds]],
+    [114] = [[380mm HE Cannon Round]],
+    [115] = [[15x100mm Emp-Rounds]],
+    [116] = [[13x40mm Penetrator]],
+    [117] = [[20mm APHET Rounds]],
+    [118] = [[100kg Bomb Mk3]],
+    [119] = [[Shrapnel]],
+    [120] = [[8x60mm Airburst]],
+    [122] = [[40mm APHE Cannon]],
+    [125] = [[12x25mm Full Metal Jacket]],
+    [128] = [[20mm HVAP Rounds]],
+    [130] = [[70mm Laser-Guided Missile]],
+    [131] = [[Volatile Plasma Bolt]],
+    [132] = [[100kg Bomb]],
+    [133] = [[Cluster Bomb]],
+    [134] = [[75mm HEAT Grenade]],
+    [135] = [[Laser]],
+    [136] = [[9x70mm Self Propelled]],
+    [137] = [[8x60mm Full Metal Jacket]],
+    [139] = [[120mm HE Cannon Round]],
+    [141] = [[5.5x50mm Subsonic]],
+    [143] = [[Napalm Bomb Mk2]],
+    [144] = [[Medium Plasma Bolt]],
+    [145] = [[Volatile Plasma Bolt]],
+    [146] = [[Laser]],
+    [147] = [[SEAF Artillery: Napalm]],
+    [148] = [[110mm Standard Rocket]],
+    [149] = [[Contact Mine]],
+    [150] = [[8x60mm Full Metal Jacket]],
+    [151] = [[Laser]],
+    [152] = [[12x25mm Full Metal Jacket]],
+    [153] = [[500kg Bomb Mk2]],
+    [155] = [[85mm HEAT Grenade]],
+    [157] = [[Medium Plasma Bolt]],
+    [158] = [[9x20mm Toxic]],
+    [160] = [[110mm Airburst Cannon Round]],
+    [162] = [[12g Magnum]],
+    [163] = [[40mm Proximity Grenade]],
+    [164] = [[Napalm Bomb Mk3]],
+    [165] = [[8x60mm Super Uranium Core]],
+    [166] = [[8x60mm Full Metal Jacket]],
+    [167] = [[9x20mm Full Metal Jacket]],
+    [168] = [[Large Plasma Bolt]],
+    [171] = [[12x25mm High Velocity]],
+    [173] = [[100kg Bomb]],
+    [174] = [[Small Plasma Bolt]],
+    [176] = [[9x20mm Explosive]],
+    [177] = [[12g Birdshot]],
+    [178] = [[20mm HE Cannon]],
+    [180] = [[15x100mm Standard Rocket]],
+    [182] = [[Laser]],
+    [183] = [[12g Buckshot]],
+    [187] = [[10g Flechettes]],
+    [189] = [[Laser]],
+    [190] = [[Railgun Round]],
+    [191] = [[Shrapnel]],
+    [193] = [[5.5x50mm Super Uranium Core]],
+    [195] = [[10g STUN ROUNDS]],
+    [196] = [[Large Plasma Bolt]],
+    [197] = [[120mm HE Cannon Round]],
+    [200] = [[110mm Gas Cannon Round]],
+    [202] = [[10g Bugshot]],
+    [203] = [[9x70mm Penetrator]],
+    [204] = [[Shrapnel]],
+    [205] = [[15x100mm Standard Rocket]],
+    [207] = [[12x25mm Toxic]],
+    [208] = [[5.5x50mm Hollow-Point]],
+    [209] = [[15x100mm High Explosive]],
+    [210] = [[9x70mm Full Metal Jacket]],
+    [211] = [[110mm E.M.S. Cannon Round Mk3]],
+    [212] = [[40mm HE Mortar]],
+    [213] = [[Cluster Bomb]],
+    [214] = [[8x60mm High Velocity]],
+    [215] = [[8x60mm Double Power]],
+    [218] = [[9x20mm Full Metal Jacket]],
+    [219] = [[380mm HE Cannon Round]],
+    [220] = [[10g Magnum]],
+    [221] = [[Railgun Stun Round]],
+    [222] = [[Laser]],
+    [223] = [[Homing Ground Missile Mk2]],
+    [224] = [[Small Plasma Bolt]],
+    [226] = [[Cluster Bomb]],
+    [227] = [[20mm Flak Rounds]],
+    [229] = [[Homing Ground Missile]],
+    [230] = [[12.5mm EIT Rounds]],
+    [231] = [[12g Tri-Ball]],
+    [232] = [[High-Velocity Shrapnel]],
+    [234] = [[12x25mm Explosive]],
+    [235] = [[85mm HEAT Grenade Mk2]],
+    [236] = [[10g Birdshot]],
+    [237] = [[Cluster Bomb]],
+    [238] = [[120mm HE Cannon Round]],
+    [240] = [[Laser]],
+    [241] = [[15x100mm Standard Rocket]],
+    [242] = [[120mm HE Cannon Round]],
+    [243] = [[500kg Bomb]],
+    [244] = [[10g Rifled Slugs]],
+    [245] = [[9x70mm High Velocity]],
+    [248] = [[9x20mm Ripper]],
+    [249] = [[66mm Missile]],
+    [254] = [[Flames]],
+    [255] = [[12.5mm BCHP Rifle Rounds]],
+    [256] = [[12g Scatter Shot]],
+    [258] = [[23mm HE Cannon]],
+    [259] = [[5.5x50mm Double Power]],
+    [261] = [[15x100mm Fragmentation]],
+    [262] = [[8x60mm Sniper Armor Piercing]],
+    [265] = [[30mm APHE Cannon]],
+    [267] = [[40mm HEAT Grenade]],
+    [268] = [[9x70mm Sniper Armor Piercing]],
+    [269] = [[12g Flechettes]],
+    [270] = [[380mm HE Cannon Round]],
+    [276] = [[66mm Missile Mk2]],
+    [277] = [[12.5mm EIT Rounds]],
+    [278] = [[Laser]],
+    [280] = [[12.5mm BCHP Rifle Rounds]],
+    [281] = [[5.5x50mm Full Metal Jacket]],
+    [282] = [[Rail Cannon Round]],
+    [283] = [[5.5x50mm Devastator]],
+    [285] = [[40mm HE Grenade]],
+    [288] = [[9x20mm Thermite]],
+    [289] = [[20mm Flak Rounds]],
+    [290] = [[Large Plasma Bolt]],
+    [291] = [[100kg Cluster Bomb]],
+    [292] = [[12x25mm Thermite]],
+    [296] = [[9x20mm Full Metal Jacket]],
+    [297] = [[10g Liberty Fire]],
+    [298] = [[500kg Bomb Mk3]],
+    [299] = [[40mm Flak Cannon]],
+    [301] = [[Large Plasma Bolt]],
+    [302] = [[40mm HE Grenade]],
+    [303] = [[Anti-Air Missile]],
+    [308] = [[40mm HE Mortar]],
+    [309] = [[70mm Standard Rocket]],
+    [310] = [[9x70mm Full Metal Jacket]],
+    [311] = [[8x60mm High Velocity]],
+    [312] = [[12g Magnum Triball]],
+    [314] = [[13x40mm Full Metal Jacket]],
+    [315] = [[5.5x50mm Explosive]],
+    [317] = [[20mm Flak Rounds]],
+    [318] = [[Napalm Bomb]],
+    [319] = [[12g Liberty Fire]],
+    [325] = [[70mm Standard Rocket]],
+    [326] = [[5.5x50mm Self Propelled]],
+    [327] = [[10g Fragmentation]],
+    [330] = [[8x60mm Subsonic]],
+    [336] = [[5.5x50mm Penetrator]],
+    [337] = [[10g Dual Sabot]],
+    [338] = [[8x60mm Penetrator]],
+    [341] = [[Homing Anti-Air Missile]],
+    [342] = [[9x20mm Hollow Point]],
+    [343] = [[100kg Bomb Mk2]],
+    [344] = [[SEAF Artillery: HIGH-YIELD EXPLOSIVE]],
+    [346] = [[Small Plasma Bolt]],
+    [350] = [[5.5x50mm High Velocity]],
+    [351] = [[40mm HE Mortar]],
+    [354] = [[70mm Laser-Guided Missile Mk2]],
+    [355] = [[85mm High-Explosive Grenade Mk2]],
+}
 -- reload times (s) of the weapons whose reload record says 0 (play the animation at its own length), by hash
 MOD.reload_seconds = {
     ['02CD7321CD8445F5'] = 2.5,
@@ -3776,8 +4008,10 @@ KINDS[T_PROJECTILE].swap_row = function(weapon, sources, shots, fire, extra)
         row.note = function(others)
             local spec, now, own = KINDS[T_PROJECTILE], read_field(row_parts[1].field), default_of(row_parts[1].field)
             local shot = spec.by_id and spec.by_id[now]
+            local round = MOD.record_names.round(now)
             local text = now == own and "its own. - / + : fire another weapon's"
-                         or ('fires: ' .. (shot and shot.label or ('projectile ' .. tostring(now))) .. '. The rows above stay its own')
+                         or ('fires: ' .. (shot and shot.label or ('projectile ' .. tostring(now)))
+                             .. (round and (' (' .. round .. ')') or '') .. '. The rows above stay its own')
             if #others > 0 then text = text .. '; ammo type shared with ' .. table.concat(others, ', ', 1, math.min(2, #others)) end
             return text
         end
@@ -3834,14 +4068,69 @@ KINDS[T_PROJECTILE].step = function(id, n)
     return list[math.max(1, math.min(#list, at + n))].id
 end
 
+
+-- The name the game gives a projectile record, and the names an explosion and a damage record go by. A
+-- projectile row carries localisation ids at +4 and +8; the strings themselves live in the .strings
+-- resources, which the panel cannot read while the game runs, so the names that exist are kept in
+-- MOD.round_names above. An explosion has no name string of its own in the data: it goes by the rounds that
+-- set it off, and a damage record by the rounds that carry it.
+MOD.record_names = { cache = nil, names = nil }
+function MOD.record_names.plain(id)      -- the name of a projectile record as the game has it, or nil
+    return MOD.record_names.names and MOD.record_names.names[id] or nil
+end
+function MOD.record_names.round(id)      -- the same name in the panel's language, or nil
+    local name = MOD.record_names.plain(id)
+    if not name then return nil end
+    if state.tr then return state.tr(name) end
+    return name
+end
+function MOD.record_names.tagged(id)     -- ' · 40mm高爆榴弹', or nothing at all
+    local name = MOD.record_names.round(id)
+    if not name then return '' end
+    return ' · ' .. name
+end
+
+function MOD.record_names.chart()         -- which round sets off an explosion, carries a damage record
+    local self = MOD.record_names
+    if self.cache then return self.cache end
+    local shots, blast, hurt, ids = {}, {}, {}, {}
+    for id, at in pairs(tables[T_PROJECTILE] and tables[T_PROJECTILE].index or {}) do
+        if type(id) == 'number' and id > 0 then shots[id] = at; ids[#ids + 1] = id end
+    end
+    table.sort(ids)
+    for _, id in ipairs(ids) do
+        local at = shots[id]
+        for _, off in ipairs({ 144, 156 }) do
+            local x = read_field(field_at(T_PROJECTILE, at + off, 'u32', 100000))
+            if x and x > 0 and not blast[x] then blast[x] = id end
+        end
+        local d = read_field(field_at(T_PROJECTILE, at + 60, 'u32', 100000))
+        if d and d > 0 and not hurt[d] then hurt[d] = id end
+    end
+    self.cache = { blast = blast, hurt = hurt }
+    return self.cache
+end
+function MOD.record_names.blast(id)      -- the name of the round that sets an explosion off
+    local round = MOD.record_names.chart().blast[id]
+    return round and MOD.record_names.round(round) or nil
+end
+function MOD.record_names.hurt(id)       -- the name of the round that carries a damage record
+    local round = MOD.record_names.chart().hurt[id]
+    return round and MOD.record_names.round(round) or nil
+end
+function MOD.record_names.forget() MOD.record_names.cache = nil end
+MOD.record_names.names = MOD.round_names
+
 -- A projectile's own label: what the id is worth on its own (calibre, damage / durable damage).
 KINDS[T_PROJECTILE].label = function(id)
     if not id or id <= 0 then return 'none (no projectile)' end
     local prow = tables[T_PROJECTILE] and tables[T_PROJECTILE].index[id]
     if not prow then return 'projectile ' .. tostring(id) .. ' (not in this game build)' end
     local text = '#' .. id
-    local calibre = read_field(field_at(T_PROJECTILE, prow + 24, 'f32', 100000))
-    if calibre then text = text .. string.format(' · %.1f mm', calibre) end
+    local round = MOD.record_names.round(id)
+    local calibre = not round and read_field(field_at(T_PROJECTILE, prow + 24, 'f32', 100000))
+    if round then text = text .. ' · ' .. round
+    elseif calibre then text = text .. string.format(' · %.1f mm', calibre) end
     local hit = read_field(field_at(T_PROJECTILE, prow + 60, 'u32', 100000))
     local drow = hit and hit > 0 and tables[T_DAMAGE] and tables[T_DAMAGE].index[hit]
     local direct = drow and read_field(field_at(T_DAMAGE, drow + 4, 'u32', 100000))
@@ -3886,8 +4175,10 @@ KINDS[T_EXPLOSION].label = function(id)
     local xrow = tables[T_EXPLOSION] and tables[T_EXPLOSION].index[id]
     if not xrow then return 'explosion ' .. tostring(id) .. ' (not in this game build)' end
     local text = '#' .. id
-    local outer = read_field(field_at(T_EXPLOSION, xrow + 20, 'f32', 100000))
-    if outer then text = text .. string.format(' · %.1f m', outer) end
+    local round = MOD.record_names.blast(id)
+    local outer = not round and read_field(field_at(T_EXPLOSION, xrow + 20, 'f32', 100000))
+    if round then text = text .. ' · ' .. round
+    elseif outer then text = text .. string.format(' · %.1f m', outer) end
     local hit = read_field(field_at(T_EXPLOSION, xrow + 4, 'u32', 100000))
     local drow = hit and hit > 0 and tables[T_DAMAGE] and tables[T_DAMAGE].index[hit]
     local direct = drow and read_field(field_at(T_DAMAGE, drow + 4, 'u32', 100000))
@@ -4702,8 +4993,28 @@ MOD.record_tabs.kind['Expl. ids'], MOD.record_tabs.prefix['Expl. ids'] = T_EXPLO
 MOD.record_tabs.kind['Status'], MOD.record_tabs.prefix['Status'] = T_STATUS, 'F3'
 for _, tab in ipairs(MOD.record_tabs.order) do MOD.record_tabs.set[tab] = true end
 state.record_tabs = MOD.record_tabs   -- the record pages, so a headless test can read them
+state.round_names = MOD.round_names
 -- A record page's title: the full name of the weapon that comes with it, then its id. A record no weapon
 -- of this list uses keeps its id and its size instead: a list of records is read at a glance.
+
+-- What the search box looks through: the title as drawn, plus the untranslated round name and the weapons
+-- behind the record, so a search still finds a page whose title is in another language.
+function MOD.record_tabs.search(tab, id, name)
+    local words = { name or '' }
+    local chart = MOD.record_names.chart()
+    local plain = tab == 'Proj. ids' and MOD.record_names.plain(id)
+               or tab == 'Expl. ids' and MOD.record_names.plain(chart.blast[id])
+               or tab == 'Status' and MOD.record_names.plain(chart.hurt[id])
+    if plain then words[#words + 1] = plain end
+    local users = MOD.record_users.of()
+    local names = tab == 'Proj. ids' and users.projectile[id]
+               or tab == 'Expl. ids' and users.explosion[id]
+    if names then
+        for _, who in ipairs(names) do words[#words + 1] = who end
+    end
+    return table.concat(words, ' ')
+end
+
 function MOD.record_tabs.name(tab, id, at)
     local users = MOD.record_users.of()
     local names = tab == 'Proj. ids' and users.projectile[id]
@@ -4719,6 +5030,9 @@ function MOD.record_tabs.name(tab, id, at)
     else
         size = KINDS[T_STATUS].names[id] or 'status'
     end
+    local round = tab == 'Proj. ids' and MOD.record_names.round(id)
+               or tab == 'Expl. ids' and MOD.record_names.blast(id)
+    if round then return '#' .. id .. ' · ' .. round end
     if who then return who .. ' · #' .. id end
     return '#' .. id .. (size and (' / ' .. size) or '')
 end
@@ -4745,7 +5059,8 @@ function MOD.record_tabs.build(tab, id)
     if by_hash[hash] then return by_hash[hash] end
     local name = MOD.record_tabs.name(tab, id, at)
     local page = { name = name, slot = tab, hash = hash, note = MOD.record_tabs.about(tab, id),
-                   id = id, rows = {}, by_id = {} }
+                   id = id, rows = {}, by_id = {},
+                   search = MOD.record_tabs.search(tab, id, name) }
     local function num(label, off, storage, min, max, small, big, section)
         local rid = 'f' .. string.format('%03X', off)
         add_row(page, section or tab, rid, label, storage, { part(rid, kind, at + off, storage, 100000) },
@@ -4844,6 +5159,7 @@ function MOD.record_tabs.rename()
         if at then
             page.name = spec.name(page.slot, page.id, at)
             page.note = spec.about(page.slot, page.id)
+            page.search = spec.search(page.slot, page.id, page.name)
         end
     end
 end
@@ -4874,7 +5190,7 @@ local function weapons_in(tab)
         end
         for _, name in ipairs(MOD.record_tabs.order) do    -- the pages a record tab has built so far
             for _, page in ipairs(MOD.record_tabs.list[name] or {}) do
-                if matches(page.name) then list[#list + 1] = page end
+                if matches(page.name) or matches(page.search or '') then list[#list + 1] = page end
             end
         end
         return list
