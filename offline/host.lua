@@ -156,6 +156,7 @@ local function main()
         end
         local text, tone = status()
         text = tr(text)
+        if bar.note then text = text .. ' ' .. tr(bar.note) end
         local x = 576 * s
         local size = 14 * s
         local limit = shim.w - 30 * s - x
@@ -175,7 +176,7 @@ local function main()
         shim.present()
     end
 
-    local function say(text, tone) bar.message, bar.tone = text, tone or MUTED end
+    local function say(text, tone, note) bar.message, bar.tone, bar.note = text, tone or MUTED, note end
 
     local function busy(text)
         bar.busy = text
@@ -188,7 +189,7 @@ local function main()
         if I.game_running() then say('Helldivers 2 is running: close it, then Install.', WARN); return end
         busy('Installing: finding what changed...')
         local changes = D.diff()
-        local writes, made, back = {}, 0, 0
+        local writes, made, back, nudged = {}, 0, 0, 0
         for k, c in ipairs(changes) do
             busy(string.format('Installing: preparing %s (%d of %d)...', c.name, k, #changes))
             local sealed, why = D.build(c, function(text) log(c.name .. ': ' .. text); shim.pump() end)
@@ -200,6 +201,7 @@ local function main()
                 return
             end
             writes[c.name], made = sealed, made + 1
+            if c.borrowed and #c.borrowed > 0 then nudged = nudged + 1 end
         end
         for name, mine in pairs(ours) do
             if mine and not writes[name] then writes[name], back = originals[name], back + 1 end
@@ -219,9 +221,12 @@ local function main()
         end
         for name, data in pairs(writes) do ours[name] = data ~= originals[name] end
         bar.base = state.writes
-        log(string.format('installed: %d changed, %d back to the original', made, back))
+        log(string.format('installed: %d changed, %d back to the original, %d had a decimal value borrowed for the hash',
+            made, back, nudged))
         say(string.format('Installed (%d game files changed%s). Start the game to play with your values.', made,
-            back > 0 and ', ' .. back .. ' back to the original' or ''), GOOD)
+            back > 0 and ', ' .. back .. ' back to the original' or ''), GOOD,
+            nudged > 0 and 'A file of one block has no spare header room, so one decimal value in it moved a few units'
+                .. ' in the last place: that is how it keeps the hash the game knows.' or nil)
     end
 
     local function restore()

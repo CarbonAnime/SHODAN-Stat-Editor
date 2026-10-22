@@ -1057,7 +1057,7 @@ local KINDS = {
     -- Hammer's; no settings table links it, the game sets it off from the strike itself)
     [T_MELEE] = { name = 'melee weapon', stride = 192, keyed = true, explosions = { ['5F3EC9BDA2BD8553'] = 19 } },
     -- names: the status effects that deal damage, by type (the game's debug names Fire, Gas)
-    [T_STATUS] = { name = 'status effect', stride = 152, tail = true, names = { [5] = 'Burning', [32] = 'Heavy burning', [42] = 'Gas', [43] = 'Gas' },
+    [T_STATUS] = { name = 'status effect', stride = 160, tail = true, names = { [5] = 'Burning', [32] = 'Heavy burning', [42] = 'Gas', [43] = 'Gas' },
                    -- stuns deal no damage (no damage row of their own); the Illuminate one (41) no weapon applies
                    stuns = { [37] = 'Stun (small)', [38] = 'Stun (medium)', [39] = 'Stun (large)', [40] = 'Stun (massive)' } },
     [TYPES.arc_weapon] = { name = 'arc weapon', stride = 80, keyed = true },
@@ -2155,12 +2155,30 @@ local function resolve_gun(weapon, key)
             return row
         end
         local impact_row = impact and blast_id('blast_id', 'Impact explosion (id)', 144)
+        -- a proximity fuse and a delay, both ProjectileInfo floats: above 0 the shot sets off while its
+        -- target is still that many metres away (+148: the AC-8 Autocannon's flak, the RL-77 Airburst
+        -- Rocket Launcher's shells), and that many seconds after the hit (+152)
+        local prox_row = impact and add_row(weapon, idsec, idp .. 'fuse_proximity', 'Blast proximity (m)', 'f32',
+                                            { part(idp .. 'fuse_proximity', T_PROJECTILE, p + 148, 'f32', 100000) },
+                                            0, 200, 0.1, 1)
+        local delay_row = impact and add_row(weapon, idsec, idp .. 'fuse_delay', 'Blast delay (s)', 'f32',
+                                             { part(idp .. 'fuse_delay', T_PROJECTILE, p + 152, 'f32', 100000) },
+                                             0, 30, 0.05, 0.5)
+        if prox_row then
+            prox_row.after = { '0: on contact; above 0: sets off this close to a target (a flak fuse).' }
+            prox_row.after_h = #prox_row.after * 16 + 6
+        end
+        if delay_row then
+            delay_row.after = { 'Seconds from the hit (or the fuse) to the blast: 0 is at once.' }
+            delay_row.after_h = #delay_row.after * 16 + 6
+        end
         local expiry_row = expiry and blast_id('expiry_blast_id', 'Expiry explosion (id)', 156)
-        if impact_row then
-            impact_row.after = { "The explosion id picks which ExplosionSettings record goes off.",
-                                 'The rows below belong to the explosion the panel opened with:',
-                                 'reopen the weapon to see the rows of a newly chosen explosion.' }
-            impact_row.after_h = #impact_row.after * 16 + 6
+        local last_id = expiry_row or delay_row or prox_row or impact_row
+        if last_id then
+            last_id.after = { "The explosion id picks which ExplosionSettings record goes off.",
+                              'The rows below belong to the explosion the panel opened with:',
+                              'reopen the weapon to see the rows of a newly chosen explosion.' }
+            last_id.after_h = #last_id.after * 16 + 6
         end
         local first = #blasts
         if impact and impact > 0 then blasts[#blasts + 1] = { id = impact, prefix = idp .. 'blast', section = xsection, damage = true } end
@@ -2194,6 +2212,24 @@ local function resolve_gun(weapon, key)
                     local rid = blast.prefix .. '_' .. r[1]
                     add_row(weapon, blast.section, rid, r[2], 'f32', { part(rid, T_EXPLOSION, xrow + r[3], 'f32', 100000) }, 0, 200, 0.1, 1)
                 end
+                -- the shrapnel it throws: how many pieces (+80) and the projectile every piece is (+84, a
+                -- ProjectileSettings id), so a blast's pieces fly, hit and explode as that shot does (the
+                -- AC-8 Autocannon's flak, the RL-77 Airburst Rocket Launcher's shells)
+                local fragsec = blast.section == 'Explosion' and 'Shrapnel' or (blast.section .. ' shrapnel')
+                local piece_row
+                local count_row = add_row(weapon, fragsec, blast.prefix .. '_frag_count', 'Shrapnel pieces', 'u32',
+                                          { part(blast.prefix .. '_frag_count', T_EXPLOSION, xrow + 80, 'u32', 100000) },
+                                          0, 200, 1, 10)
+                count_row.note = function()
+                    local id = piece_row and read_field(piece_row.parts[1].field)
+                    return 'pieces it throws, each one ' .. KINDS[T_PROJECTILE].label(id) .. '. - / + : another one'
+                end
+                piece_row = add_row(weapon, fragsec, blast.prefix .. '_frag_projectile', 'Shrapnel projectile (id)', 'u32',
+                                    { { id = blast.prefix .. '_frag_projectile',
+                                        field = field_at(T_EXPLOSION, xrow + 84, 'u32', 100000) } }, 0, 100000, 1, 10)
+                piece_row.choice = 'shrapnel'
+                piece_row.after = { 'The projectile each piece is (its own flight, damage and explosion).' }
+                piece_row.after_h = #piece_row.after * 16 + 6
                 -- the arc it makes (explosion +120 arc type -> arc row: +8 range, +28 chain length, +32 chain
                 -- split, +36 damage row), as a throwable's: the GL-52 De-Escalator's grenade
                 local arc = tables[TYPES.arc] and tables[TYPES.arc].index[read_field(field_at(T_EXPLOSION, xrow + 120, 'u32', 100000)) or -1]
@@ -3671,6 +3707,46 @@ KINDS[T_PROJECTILE].step = function(id, n)
     return list[math.max(1, math.min(#list, at + n))].id
 end
 
+-- A projectile's own label: what the id is worth on its own (calibre, damage / durable damage).
+KINDS[T_PROJECTILE].label = function(id)
+    if not id or id <= 0 then return 'none (no projectile)' end
+    local prow = tables[T_PROJECTILE] and tables[T_PROJECTILE].index[id]
+    if not prow then return 'projectile ' .. tostring(id) .. ' (not in this game build)' end
+    local text = '#' .. id
+    local calibre = read_field(field_at(T_PROJECTILE, prow + 24, 'f32', 100000))
+    if calibre then text = text .. string.format(' · %.1f mm', calibre) end
+    local hit = read_field(field_at(T_PROJECTILE, prow + 60, 'u32', 100000))
+    local drow = hit and hit > 0 and tables[T_DAMAGE] and tables[T_DAMAGE].index[hit]
+    local direct = drow and read_field(field_at(T_DAMAGE, drow + 4, 'u32', 100000))
+    local durable = drow and read_field(field_at(T_DAMAGE, drow + 8, 'u32', 100000))
+    if direct then text = text .. string.format(' · %d / %d', direct, durable or 0) end
+    return text
+end
+
+-- Every projectile id, none first then by number (the weapon swap above lists the panel's own shots by
+-- name; a blast's shrapnel and the shot pages can be any shot the game has).
+KINDS[T_PROJECTILE].list_all = function()
+    local spec, list, ids = KINDS[T_PROJECTILE], { { id = 0, label = 'none (no projectile)' } }, {}
+    for id in pairs(tables[T_PROJECTILE] and tables[T_PROJECTILE].index or {}) do
+        if type(id) == 'number' and id > 0 then ids[#ids + 1] = id end
+    end
+    table.sort(ids)
+    for _, id in ipairs(ids) do list[#list + 1] = { id = id, label = spec.label(id) } end
+    local by = {}
+    for k, choice in ipairs(list) do by[choice.id] = k end
+    spec.all, spec.all_by = list, by
+    return list
+end
+
+KINDS[T_PROJECTILE].step_all = function(id, n)
+    local spec = KINDS[T_PROJECTILE]
+    local list = spec.all or spec.list_all()
+    if #list == 0 then return id end
+    local at = spec.all_by and spec.all_by[id]
+    at = at or (n > 0 and 0 or #list + 1)
+    return list[math.max(1, math.min(#list, at + n))].id
+end
+
 -- Explosion choices (KINDS[T_EXPLOSION].choices): none, then every ExplosionSettings record the game
 -- has, by id. A projectile's explosion ids are picked from here: one weapon's shot can be given another's
 -- blast, or none. The label is what the id is worth on its own (outer radius, damage / durable damage).
@@ -3750,6 +3826,7 @@ local function resolve_some(progress, deadline)
         KINDS[TYPES.custom].cache = {}
         KINDS[TYPES.throwable].prepare_grenades()
         KINDS[T_EXPLOSION].choices, KINDS[T_EXPLOSION].by_id = nil, nil   -- a rescan may have changed the tables
+        KINDS[T_PROJECTILE].all, KINDS[T_PROJECTILE].all_by = nil, nil     -- and the id-ordered list of every shot
     end
     while progress.next <= #weapons do
         resolve(weapons[progress.next])
@@ -4128,7 +4205,7 @@ end
 local function apply_config(deadline)
     while apply_at <= #pending do
         local o = pending[apply_at]
-        local weapon = by_hash[o.hash]
+        local weapon = by_hash[o.hash] or MOD.record_tabs.find(o.hash)
         local parts = weapon and MOD.parts_of(weapon, o.id)
         local keep = false
         if o.after and api.now() < o.after then
@@ -4479,7 +4556,122 @@ local ui = { open = false, measured = {}, measures = 0, tab = 'Primary', page = 
 
 -- the status line, for code above the panel's
 function MOD.notify(text, seconds) ui.message = { text = text, till = api.now() + (seconds or 4) } end
-local TABS = { 'Primary', 'Secondary', 'Support', 'Throwables', 'Stratagems', 'Mechas', 'Attachments', 'Armors', 'Presets' }
+-- record tabs
+MOD.record_tabs = { order = { 'Proj. ids', 'Expl. ids', 'Status' }, kind = {}, prefix = {}, set = {},
+                    list = {}, by = {}, built = {} }
+MOD.record_tabs.kind['Proj. ids'], MOD.record_tabs.prefix['Proj. ids'] = T_PROJECTILE, 'F1'
+MOD.record_tabs.kind['Expl. ids'], MOD.record_tabs.prefix['Expl. ids'] = T_EXPLOSION, 'F2'
+MOD.record_tabs.kind['Status'], MOD.record_tabs.prefix['Status'] = T_STATUS, 'F3'
+for _, tab in ipairs(MOD.record_tabs.order) do MOD.record_tabs.set[tab] = true end
+function MOD.record_tabs.build(tab, id)
+    local spec = MOD.record_tabs
+    local kind = spec.kind[tab]
+    local entry = kind and tables[kind]
+    local at = entry and type(id) == 'number' and entry.index[id]
+    if not at then return nil end
+    local hash = string.format('%s%014X', spec.prefix[tab], id)
+    if by_hash[hash] then return by_hash[hash] end
+    local name = '#' .. id
+    if tab == 'Proj. ids' then
+        local calibre = read_field(field_at(T_PROJECTILE, at + 24, 'f32', 100000))
+        if calibre then name = name .. string.format(' / %.1f mm', calibre) end
+    elseif tab == 'Expl. ids' then
+        local outer = read_field(field_at(T_EXPLOSION, at + 20, 'f32', 100000))
+        if outer then name = name .. string.format(' / %.1f m', outer) end
+    else
+        name = name .. ' / ' .. (KINDS[T_STATUS].names[id] or 'status')
+    end
+    local page = { name = name, slot = tab, hash = hash, note = '', rows = {}, by_id = {} }
+    local function num(label, off, storage, min, max, small, big, section)
+        local rid = 'f' .. string.format('%03X', off)
+        add_row(page, section or tab, rid, label, storage, { part(rid, kind, at + off, storage, 100000) },
+                min, max, small, big)
+    end
+    if tab == 'Proj. ids' then
+        num('Calibre (mm)', 24, 'f32', 0, 1000, 0.1, 1, 'Projectile')
+        num('Projectiles per shot', 28, 'u32', 1, 200, 1, 10, 'Projectile')
+        num('Velocity (m/s)', 32, 'f32', 0, 100000, 10, 100, 'Projectile')
+        num('Mass (kg)', 36, 'f32', 0, 10000, 0.1, 1, 'Projectile')
+        num('Drag factor', 40, 'f32', 0, 100, 0.01, 0.1, 'Projectile')
+        num('Gravity factor', 44, 'f32', 0, 100, 0.01, 0.1, 'Projectile')
+        num('Life time (s)', 56, 'f32', 0, 1000, 0.1, 1, 'Projectile')
+        num('Penetration slowdown', 64, 'f32', 0, 10, 0.01, 0.1, 'Projectile')
+        local hit = read_field(field_at(T_PROJECTILE, at + 60, 'u32', 100000))
+        local victim = hit and tables[T_DAMAGE] and tables[T_DAMAGE].index[hit]
+        if victim then damage_rows(page, 'Damage', 'dmg_', victim) end
+        local function blast(label, off)
+            local rid = 'f' .. string.format('%03X', off)
+            local row = add_row(page, 'Explosion id', rid, label, 'u32',
+                                { { id = rid, field = field_at(T_PROJECTILE, at + off, 'u32', 100000) } }, 0, 100000, 1, 10)
+            row.choice = 'explosion'
+            row.note = function() return 'sets off: ' .. KINDS[T_EXPLOSION].label(read_field(row.parts[1].field)) end
+            return row
+        end
+        blast('Impact explosion (id)', 144)
+        num('Blast proximity (m)', 148, 'f32', 0, 200, 0.1, 1, 'Explosion id')
+        num('Blast delay (s)', 152, 'f32', 0, 30, 0.05, 0.5, 'Explosion id')
+        blast('Expiry explosion (id)', 156)
+        num('Arming distance (m)', 160, 'f32', 0, 200, 0.1, 1, 'Explosion id')
+        num('Blast angle (deg)', 136, 'f32', 0, 180, 1, 10, 'Explosion id')
+    elseif tab == 'Expl. ids' then
+        local hit = read_field(field_at(T_EXPLOSION, at + 4, 'u32', 100000))
+        local victim = hit and tables[T_DAMAGE] and tables[T_DAMAGE].index[hit]
+        if victim then damage_rows(page, 'Damage', 'dmg_', victim) end
+        num('Inner radius (m)', 16, 'f32', 0, 200, 0.1, 1, 'Radius')
+        num('Outer radius (m)', 20, 'f32', 0, 200, 0.1, 1, 'Radius')
+        num('Shockwave radius (m)', 24, 'f32', 0, 200, 0.1, 1, 'Radius')
+        num('Cone angle (deg)', 28, 'f32', 0, 360, 1, 10, 'Shape')
+        num('Camera shake radius (m)', 32, 'f32', 0, 200, 0.1, 1, 'Shape')
+        num('Shrapnel pieces', 80, 'u32', 0, 200, 1, 10, 'Shrapnel')
+        local piece = add_row(page, 'Shrapnel', 'f054', 'Shrapnel projectile (id)', 'u32',
+                              { { id = 'f054', field = field_at(T_EXPLOSION, at + 84, 'u32', 100000) } }, 0, 100000, 1, 10)
+        piece.choice = 'shrapnel'
+        piece.note = function() return 'each piece is ' .. KINDS[T_PROJECTILE].label(read_field(piece.parts[1].field)) end
+    else
+        num('Duration (s)', 40, 'f32', 0, 100000, 0.1, 1, 'Status')
+        local hit = read_field(field_at(T_STATUS, at + 44, 'u32', 100000))
+        local victim = hit and tables[T_DAMAGE] and tables[T_DAMAGE].index[hit]
+        if victim then damage_rows(page, 'Damage', 'dmg_', victim) end
+    end
+    by_hash[hash] = page
+    spec.by[hash] = page
+    return page
+end
+-- Every page of a record tab, built once (the tab is opened, or a saved value needs its page).
+function MOD.record_tabs.page(tab)
+    local spec = MOD.record_tabs
+    if spec.built[tab] then return spec.list[tab] or {} end
+    spec.built[tab] = true
+    local list, ids = {}, {}
+    local entry = spec.kind[tab] and tables[spec.kind[tab]]
+    for id in pairs(entry and entry.index or {}) do
+        if type(id) == 'number' and id > 0 then ids[#ids + 1] = id end
+    end
+    table.sort(ids)
+    for _, id in ipairs(ids) do
+        local page = MOD.record_tabs.build(tab, id)
+        if page then list[#list + 1] = page end
+    end
+    spec.list[tab] = list
+    return list
+end
+-- The page a hash names ('F1' + 14 hex digits, as save_config writes it), built on demand.
+function MOD.record_tabs.find(hash)
+    local spec = MOD.record_tabs
+    if spec.by[hash] then return spec.by[hash] end
+    if type(hash) ~= 'string' then return nil end
+    local mark, digits = hash:match('^(F%d)(%x+)$')
+    if not mark then return nil end
+    for _, tab in ipairs(spec.order) do
+        if spec.prefix[tab] == mark then
+            local id = tonumber(digits, 16)
+            if id then return MOD.record_tabs.build(tab, id) end
+        end
+    end
+    return nil
+end
+local TABS = { 'Primary', 'Secondary', 'Support', 'Throwables', 'Stratagems', 'Mechas', 'Attachments', 'Armors',
+               'Proj. ids', 'Expl. ids', 'Status', 'Presets' }
 local LIST_ROWS = 27
 local W, H = 1000, 980       -- panel size in its own units
 
@@ -4491,18 +4683,28 @@ local function weapons_in(tab)
         words = {}
         for word in ui.search.text:lower():gmatch('%S+') do words[#words + 1] = word end
     end
-    for _, weapon in ipairs(weapons) do
-        if #weapon.rows > 0 then
-            if words then
-                local name, all = weapon.name:lower(), true
-                for _, word in ipairs(words) do
-                    if not name:find(word, 1, true) then all = false; break end
-                end
-                if all then list[#list + 1] = weapon end
-            elseif weapon.slot == tab then
-                list[#list + 1] = weapon
+    local function matches(name)
+        if not words then return true end
+        name = name:lower()
+        for _, word in ipairs(words) do
+            if not name:find(word, 1, true) then return false end
+        end
+        return true
+    end
+    if words then
+        for _, weapon in ipairs(weapons) do
+            if #weapon.rows > 0 and matches(weapon.name) then list[#list + 1] = weapon end
+        end
+        for _, name in ipairs(MOD.record_tabs.order) do    -- the pages a record tab has built so far
+            for _, page in ipairs(MOD.record_tabs.list[name] or {}) do
+                if matches(page.name) then list[#list + 1] = page end
             end
         end
+        return list
+    end
+    if MOD.record_tabs.set[tab] then return MOD.record_tabs.page(tab) end
+    for _, weapon in ipairs(weapons) do
+        if #weapon.rows > 0 and weapon.slot == tab then list[#list + 1] = weapon end
     end
     return list
 end
@@ -4690,6 +4892,24 @@ local function change(row, delta_sign, big, exact)
                            or KINDS[T_EXPLOSION].step(current, delta_sign * (big and 10 or 1))
             if target ~= 0 and not (tables[T_EXPLOSION] and tables[T_EXPLOSION].index[target]) then
                 ui.message = { text = 'No explosion ' .. tostring(target) .. ' in this game build.', till = api.now() + 4 }
+                return
+            end
+            if target == current then return end
+            for _, p in ipairs(row.parts) do
+                local d = default_of(p.field)
+                local ok, why = write_field(p.field, target)
+                if ok then set_override(weapon, p, unless_default(target, d))
+                else log('write refused: ' .. weapon.name .. ' ' .. p.id .. ': ' .. why) end
+            end
+            ui.version = ui.version + 1
+            return
+        end
+        if row.choice == 'shrapnel' then
+            -- the projectile every shrapnel piece is: none (0) or any ProjectileSettings record
+            local target = exact and math.floor(exact + 0.5)
+                           or KINDS[T_PROJECTILE].step_all(current, delta_sign * (big and 10 or 1))
+            if target ~= 0 and not (tables[T_PROJECTILE] and tables[T_PROJECTILE].index[target]) then
+                ui.message = { text = 'No projectile ' .. tostring(target) .. ' in this game build.', till = api.now() + 4 }
                 return
             end
             if target == current then return end
@@ -5295,11 +5515,25 @@ local function draw(width, height)
         return regions
     end
 
-    local tab_x = 16
-    for _, tab in ipairs(TABS) do
-        local w = #tab * 8 + 20     -- each tab as wide as its name
-        button('tab:' .. tab, tab, tab_x, 52, w, 32, true, ui.tab == tab)
-        tab_x = tab_x + w + 5
+    -- the tab row: each tab as wide as its own (translated) name, and the row never reaching the reset
+    -- button on its right: a long translation, or twelve tabs, shrinks the row instead of overlapping
+    do
+        local widths, total = {}, 0
+        for i, tab in ipairs(TABS) do
+            local w = #tab * 7 + 8      -- never narrower than its English name
+            local m = width(tab, 16) + 18
+            if m > w then w = m end
+            widths[i] = w
+            total = total + w
+        end
+        local room = W - 16 - 124 - 16 - 4 * (#TABS - 1)
+        local fit = total > room and room / total or 1
+        local tab_x = 16
+        for i, tab in ipairs(TABS) do
+            local w = math.floor(widths[i] * fit + 0.5)
+            button('tab:'..tab, tab, tab_x, 52, w, 32, true, ui.tab == tab)
+            tab_x = tab_x + w + 4
+        end
     end
     button('reset_weapon', ui.weapon and ui.weapon.passive and 'Reset passive' or 'Reset weapon', W - 16 - 124, 52, 124, 32, ui.weapon ~= nil and modified(ui.weapon))
 
@@ -5914,7 +6148,11 @@ local function keyboard(now)
     end
     if pressed('PageDown', now) or pressed('PageUp', now) then
         local all = {}
-        for _, tab in ipairs(TABS) do for _, w in ipairs(weapons_in(tab)) do all[#all + 1] = w end end
+        for _, tab in ipairs(TABS) do
+            if not MOD.record_tabs.set[tab] then    -- a record tab's pages are built only when it is opened
+                for _, w in ipairs(weapons_in(tab)) do all[#all + 1] = w end
+            end
+        end
         local at = 0
         for n, w in ipairs(all) do if w == weapon then at = n end end
         local forward = held.PageDown ~= nil
@@ -6435,7 +6673,8 @@ local function open_panel(open)
         if state.phase == 'ready' and not tables_intact() then rescan() end
         if not ui.restored and state.phase == 'ready' then
             ui.restored = true
-            local last = settings.remember and settings.last_weapon and by_hash[settings.last_weapon]
+            local last = settings.remember and settings.last_weapon
+                         and (by_hash[settings.last_weapon] or MOD.record_tabs.find(settings.last_weapon))
             if last and #last.rows > 0 then
                 select_weapon(last)
             elseif settings.remember and settings.last_tab then

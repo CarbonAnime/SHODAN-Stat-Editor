@@ -221,8 +221,8 @@ function M.correct(p, n, target, edited_floats, log)
     if not X then X = hs[#hs].at end
     local words_end = aligned and X + 24 or X + 28   -- the words the solver writes end here
     local slots = salt_slots(p, n, hs, X, edited_floats)
-    if #slots == 0 then return nil, 'nothing to vary for the hash: this file has one block, so a decimal' ..
-                                       ' value in it must change too (a projectile\'s Caliber, for one)' end
+    if #slots == 0 then return nil, 'nothing to vary for the hash: this file has one block and no decimal value' ..
+                                       ' near the change to move with it' end
     local solve = aligned and solve_aligned or solve_unaligned
     local first = aligned and X + 16 or X + 12      -- the first solved word
     local start = bit.bxor(SEED, (n + 0ULL) * MUL)

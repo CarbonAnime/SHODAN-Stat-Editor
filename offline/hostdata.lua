@@ -131,8 +131,64 @@ function M.relocate()
 end
 
 -- ---------------------------------------------------------------- what changed
+-- a value with decimals, between 1e-4 and 1e7: what a hash correction can move by a few units in the last place
+local function decimal(p, o)
+    local v = ffi.cast('float *', p + o)[0]
+    return v == v and math.abs(v) >= 1e-4 and math.abs(v) < 1e7 and u32(p, o) >= 0x38D1B717
+end
+
+-- a record of whole numbers may hold a word that only looks like a float: the fields around it tell - a value
+-- this editor may move sits with other values with decimals (velocity, mass, drag), an id or a count does not
+local function crowded(p, n, at, blocked, resolved)
+    local around = 0
+    for k = -32, 32, 4 do
+        local o = at + k
+        if k ~= 0 and o >= 0 and o + 4 <= n and not blocked[o] and not (resolved and resolved[o])
+           and decimal(p, o) and math.abs(ffi.cast('float *', p + o)[0]) >= 1e-3 then
+            around = around + 1
+        end
+    end
+    return around >= 2
+end
+
+-- A file of one block has no spare header bytes to vary, so a change with no decimal value in it leaves the hash
+-- correction nothing to work with: borrow the nearest decimal value of the same record (a projectile's Caliber,
+-- its Drag...) and the correction moves it by under 0.05 %. `words`: the 4-byte words that changed.
+local function borrowing(f, p, n, words)
+    local blocked = {}
+    for _, h in ipairs(G.headers(p, n)) do for o = h.at, h.at + 23 do blocked[o] = true end end
+    local starts = {}
+    for o in pairs(words) do
+        blocked[o] = true
+        starts[#starts + 1] = o
+    end
+    table.sort(starts)
+    local out, seen = {}, {}
+    for step = 4, 1024, 4 do
+        for _, base in ipairs(starts) do
+            for _, at in ipairs({ base + step, base - step }) do
+                at = at - at % 4
+                if at >= 0 and at + 4 <= n and not seen[at] then
+                    seen[at] = true
+                    local free = true
+                    for k = at, at + 3 do
+                        if blocked[k] or (f.resolved and f.resolved[k]) then free = false; break end
+                    end
+                    if free and decimal(p, at) and math.abs(ffi.cast('float *', p + at)[0]) >= 1e-3
+                       and crowded(p, n, at, blocked, f.resolved) then
+                        out[#out + 1] = at
+                        if #out >= 6 then return out end
+                    end
+                end
+            end
+        end
+    end
+    return out
+end
+
 -- the plain text to install for a file (a new buffer) and the offsets of changed f32-looking words, or nil when
--- nothing changed. Resolved fields keep their stored bytes.
+-- nothing changed. Resolved fields keep their stored bytes. `borrowed`: the decimal values lent to the hash
+-- correction when nothing with decimals changed (see borrowing): the install says so.
 local function changes(f)
     local orig, n = G.open_sealed(f.cipher)
     local changed, words = 0, {}
@@ -160,15 +216,21 @@ local function changes(f)
         if v == v and math.abs(v) >= 1e-4 and math.abs(v) < 1e7 and i >= 0x38D1B717 then floats[#floats + 1] = o end
     end
     table.sort(floats)
-    return orig, n, changed, floats
+    local borrowed
+    if #floats == 0 then
+        floats = borrowing(f, orig, n, words)
+        borrowed = #floats > 0 and floats or nil
+    end
+    return orig, n, changed, floats, borrowed
 end
 
--- every file whose plain text differs from its original: { name, plain, n, bytes, floats }
+-- every file whose plain text differs from its original: { name, plain, n, bytes, floats, borrowed, hash }
 function M.diff()
     local out = {}
     for name, f in pairs(M.files) do
-        local plain, n, count, floats = changes(f)
-        if plain then out[#out + 1] = { name = name, plain = plain, n = n, bytes = count, floats = floats, hash = f.hash } end
+        local plain, n, count, floats, borrowed = changes(f)
+        if plain then out[#out + 1] = { name = name, plain = plain, n = n, bytes = count, floats = floats,
+                                        borrowed = borrowed, hash = f.hash } end
     end
     table.sort(out, function(x, y) return x.name < y.name end)
     return out
