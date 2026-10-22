@@ -2157,8 +2157,9 @@ local function resolve_gun(weapon, key)
         local impact_row = impact and blast_id('blast_id', 'Impact explosion (id)', 144)
         local expiry_row = expiry and blast_id('expiry_blast_id', 'Expiry explosion (id)', 156)
         if impact_row then
-            impact_row.after = { "The explosion's rows (damage, radii, arc, under this one) are the",
-                                 'explosion the panel opened with: reopen it to see a newly chosen one.' }
+            impact_row.after = { "The explosion id picks which ExplosionSettings record goes off.",
+                                 'The rows below belong to the explosion the panel opened with:',
+                                 'reopen the weapon to see the rows of a newly chosen explosion.' }
             impact_row.after_h = #impact_row.after * 16 + 6
         end
         local first = #blasts
