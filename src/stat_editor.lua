@@ -3624,6 +3624,127 @@ end
 -- the Recoilless Rifle's HE) fire the fire mode's +576 in it: a second swap row for that one. `extra`
 -- (KINDS[T_ROUNDS].extra): a patterned magazine's rounds take the swapped projectile too (every one of
 -- them), a second ammo type has its own row.
+-- Which weapon comes with a given projectile (its own shot, its second firing mode, its alternate
+-- ammunition), and which weapons' shots set a given explosion off (their shot's impact or expiry
+-- explosion, or the explosion their shrapnel projectile sets off). The record tabs and the id notes name
+-- a record after them. Built once, every weapon resolved, and forgotten when the tables are rescanned.
+MOD.record_users = { cache = nil }
+function MOD.record_users.of()
+    if MOD.record_users.cache then return MOD.record_users.cache end
+    local users = { projectile = {}, explosion = {} }
+    local function add(map, id, name)
+        if not id or id <= 0 or not name or name:match('^%(Not') then return end   -- '(Not Used)' dummies
+        local list = map[id]
+        if not list then list = {}; map[id] = list end
+        for k = 1, #list do if list[k] == name then return end end
+        list[#list + 1] = name
+    end
+    for _, w in ipairs(weapons) do
+        local seen = {}
+        local function own(id)
+            if id and id > 0 and not seen[id] then seen[id] = true; add(users.projectile, id, w.name) end
+        end
+        own(w.projectile)
+        for _, shot in ipairs(w.own_shots or {}) do own(shot.id) end
+    end
+    -- The same again off every page's own rows: a stratagem's blast, an attachment's shot, a sentry's
+    -- shell. A row holds an absolute offset into its table, so the record it touches names the page.
+    local function locator(kind, stride)
+        local spots = {}
+        for id, at in pairs((tables[kind] or {}).index or {}) do
+            if type(id) == 'number' and id > 0 then spots[#spots + 1] = { at = at, id = id } end
+        end
+        table.sort(spots, function(a, b) return a.at < b.at end)
+        return function(offset)
+            local lo, hi = 1, #spots
+            while lo <= hi do
+                local mid = math.floor((lo + hi) / 2)
+                local spot = spots[mid]
+                if offset < spot.at then hi = mid - 1
+                elseif offset >= spot.at + stride then lo = mid + 1
+                else return spot.id end
+            end
+            return nil
+        end
+    end
+    local projectile_at = locator(T_PROJECTILE, KINDS[T_PROJECTILE].stride or 272)
+    local explosion_at = locator(T_EXPLOSION, KINDS[T_EXPLOSION].stride or 152)
+    for _, page in pairs(by_hash) do
+        if type(page) == 'table' and page.name and not page.id then
+            for _, row in ipairs(page.rows or {}) do
+                for _, p in ipairs(row.parts or {}) do
+                    local f = p.field
+                    local offset = f and type(f.offset) == 'number' and f.offset
+                    if offset then
+                        if f.kind == T_PROJECTILE then
+                            local id = projectile_at(offset)
+                            if id then add(users.projectile, id, page.name) end
+                        elseif f.kind == T_EXPLOSION then
+                            local id = explosion_at(offset)
+                            if id then add(users.explosion, id, page.name) end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    for id, names in pairs(users.projectile) do
+        local prow = tables[T_PROJECTILE] and tables[T_PROJECTILE].index[id]
+        if prow then
+            for _, off in ipairs({ 144, 156 }) do
+                local blast = read_field(field_at(T_PROJECTILE, prow + off, 'u32', 100000))
+                if blast and blast > 0 then
+                    for _, name in ipairs(names) do add(users.explosion, blast, name) end
+                end
+            end
+        end
+    end
+    for id in pairs(tables[T_EXPLOSION] and tables[T_EXPLOSION].index or {}) do
+        local xrow = type(id) == 'number' and id > 0 and tables[T_EXPLOSION].index[id]
+        local piece = xrow and read_field(field_at(T_EXPLOSION, xrow + 84, 'u32', 100000))
+        local names = piece and piece > 0 and users.projectile[piece]
+        local prow = piece and piece > 0 and tables[T_PROJECTILE] and tables[T_PROJECTILE].index[piece]
+        local impact = prow and read_field(field_at(T_PROJECTILE, prow + 144, 'u32', 100000))
+        if names and impact == id then
+            for _, name in ipairs(names) do add(users.explosion, id, name) end
+        end
+    end
+    for _, map in ipairs({ users.projectile, users.explosion }) do
+        for _, list in pairs(map) do table.sort(list, function(a, b) return a:lower() < b:lower() end) end
+    end
+    if state.phase == 'ready' then MOD.record_users.cache = users end
+    return users
+end
+-- A weapon's short tag for a narrow line: its designation ('GL-21', 'AC-8'), else its first word.
+function MOD.record_users.short(names)
+    if not names or #names == 0 then return nil end
+    local pick = names[1]
+    for _, name in ipairs(names) do
+        if not name:match('^[Ee]/') then pick = name; break end   -- 'E/' is an emplacement's own mount
+    end
+    local mark = pick:match('^([%w/]+%-%d+[%w]*)')        -- GL-21, AC-8, SMG/FLAM-34, A/M-12
+    if not mark then
+        local first, second = pick:match('^(%S+)%s+(%S+)')
+        local generic = first and ({ orbital = true, eagle = true, combat = true,
+                                     incendiary = true, seaf = true })[first:lower()]
+        mark = (generic and second) and first .. ' ' .. second or first or pick
+    end
+    if #mark > 20 then mark = mark:sub(1, 20) end
+    if #names > 1 then mark = mark .. ' +' .. (#names - 1) end
+    return mark
+end
+-- Some (or all) of the names, as many as most then '+N'.
+function MOD.record_users.long(names, most)
+    if not names or #names == 0 then return nil end
+    most = most or 3
+    local out = {}
+    for k = 1, math.min(most, #names) do out[#out + 1] = names[k] end
+    local text = table.concat(out, ', ')
+    if #names > most then text = text .. ' +' .. (#names - most) end
+    return text
+end
+function MOD.record_users.forget() MOD.record_users.cache = nil end
+
 KINDS[T_PROJECTILE].swap_row = function(weapon, sources, shots, fire, extra)
     if #sources == 0 or not (weapon.projectile or shots) then return end
     local main = nil
@@ -3720,6 +3841,10 @@ KINDS[T_PROJECTILE].label = function(id)
     local direct = drow and read_field(field_at(T_DAMAGE, drow + 4, 'u32', 100000))
     local durable = drow and read_field(field_at(T_DAMAGE, drow + 8, 'u32', 100000))
     if direct then text = text .. string.format(' · %d / %d', direct, durable or 0) end
+    local made = MOD.record_users.of().projectile[id]
+    local tag = made and MOD.record_users.short(made)
+    if tag then text = text .. ' · ' .. tag end
+
     return text
 end
 
@@ -3762,6 +3887,10 @@ KINDS[T_EXPLOSION].label = function(id)
     local direct = drow and read_field(field_at(T_DAMAGE, drow + 4, 'u32', 100000))
     local durable = drow and read_field(field_at(T_DAMAGE, drow + 8, 'u32', 100000))
     if direct then text = text .. string.format(' · %d / %d', direct, durable or 0) end
+    local made = MOD.record_users.of().explosion[id]
+    local tag = made and MOD.record_users.short(made)
+    if tag then text = text .. ' · ' .. tag end
+
     return text
 end
 
@@ -3826,6 +3955,7 @@ local function resolve_some(progress, deadline)
         KINDS[TYPES.custom].cache = {}
         KINDS[TYPES.throwable].prepare_grenades()
         KINDS[T_EXPLOSION].choices, KINDS[T_EXPLOSION].by_id = nil, nil   -- a rescan may have changed the tables
+        MOD.record_users.forget()
         KINDS[T_PROJECTILE].all, KINDS[T_PROJECTILE].all_by = nil, nil     -- and the id-ordered list of every shot
     end
     while progress.next <= #weapons do
@@ -3836,6 +3966,8 @@ local function resolve_some(progress, deadline)
     if progress.next <= #weapons then return false end
     KINDS[T_PROJECTILE].list_choices()
     KINDS[T_EXPLOSION].list_choices()
+    MOD.record_users.forget()          -- the record names are the weapons' own shot lists
+    MOD.record_tabs.rename()
     local usable, strats = 0, 0
     state.attachments, state.throwables, state.passives, state.vehicles = 0, 0, 0, 0
     for _, weapon in ipairs(weapons) do
@@ -4563,15 +4695,14 @@ MOD.record_tabs.kind['Proj. ids'], MOD.record_tabs.prefix['Proj. ids'] = T_PROJE
 MOD.record_tabs.kind['Expl. ids'], MOD.record_tabs.prefix['Expl. ids'] = T_EXPLOSION, 'F2'
 MOD.record_tabs.kind['Status'], MOD.record_tabs.prefix['Status'] = T_STATUS, 'F3'
 for _, tab in ipairs(MOD.record_tabs.order) do MOD.record_tabs.set[tab] = true end
-function MOD.record_tabs.build(tab, id)
-    local spec = MOD.record_tabs
-    local kind = spec.kind[tab]
-    local entry = kind and tables[kind]
-    local at = entry and type(id) == 'number' and entry.index[id]
-    if not at then return nil end
-    local hash = string.format('%s%014X', spec.prefix[tab], id)
-    if by_hash[hash] then return by_hash[hash] end
+state.record_tabs = MOD.record_tabs   -- the record pages, so a headless test can read them
+-- A record page's title: its id, the weapon that comes with it (short: 'GL-21', 'AC-8 +2'), its size.
+function MOD.record_tabs.name(tab, id, at)
+    local users = MOD.record_users.of()
+    local short = MOD.record_users.short(tab == 'Proj. ids' and users.projectile[id]
+                                      or tab == 'Expl. ids' and users.explosion[id])
     local name = '#' .. id
+    if short then name = name .. ' · ' .. short end
     if tab == 'Proj. ids' then
         local calibre = read_field(field_at(T_PROJECTILE, at + 24, 'f32', 100000))
         if calibre then name = name .. string.format(' / %.1f mm', calibre) end
@@ -4581,7 +4712,32 @@ function MOD.record_tabs.build(tab, id)
     else
         name = name .. ' / ' .. (KINDS[T_STATUS].names[id] or 'status')
     end
-    local page = { name = name, slot = tab, hash = hash, note = '', rows = {}, by_id = {} }
+    return name
+end
+-- Under the title: every weapon that comes with the record (a shot) or sets it off (an explosion).
+function MOD.record_tabs.about(tab, id)
+    local users = MOD.record_users.of()
+    if tab == 'Proj. ids' then
+        local names = users.projectile[id]
+        if names and #names > 0 then return 'Fired by: ' .. MOD.record_users.long(names) end
+    elseif tab == 'Expl. ids' then
+        local names = users.explosion[id]
+        if names and #names > 0 then return 'Set off by: ' .. MOD.record_users.long(names) end
+    end
+    if tab ~= 'Status' then return 'Not used by any weapon or stratagem in this list.' end
+    return ''
+end
+function MOD.record_tabs.build(tab, id)
+    local spec = MOD.record_tabs
+    local kind = spec.kind[tab]
+    local entry = kind and tables[kind]
+    local at = entry and type(id) == 'number' and entry.index[id]
+    if not at then return nil end
+    local hash = string.format('%s%014X', spec.prefix[tab], id)
+    if by_hash[hash] then return by_hash[hash] end
+    local name = MOD.record_tabs.name(tab, id, at)
+    local page = { name = name, slot = tab, hash = hash, note = MOD.record_tabs.about(tab, id),
+                   id = id, rows = {}, by_id = {} }
     local function num(label, off, storage, min, max, small, big, section)
         local rid = 'f' .. string.format('%03X', off)
         add_row(page, section or tab, rid, label, storage, { part(rid, kind, at + off, storage, 100000) },
@@ -4669,6 +4825,19 @@ function MOD.record_tabs.find(hash)
         end
     end
     return nil
+end
+-- Names need every weapon resolved: a page built before that (a saved value, a remembered tab) takes
+-- its name again once the weapons are in.
+function MOD.record_tabs.rename()
+    local spec = MOD.record_tabs
+    for _, page in pairs(spec.by) do
+        local entry = spec.kind[page.slot] and tables[spec.kind[page.slot]]
+        local at = entry and type(page.id) == 'number' and entry.index[page.id]
+        if at then
+            page.name = spec.name(page.slot, page.id, at)
+            page.note = spec.about(page.slot, page.id)
+        end
+    end
 end
 local TABS = { 'Primary', 'Secondary', 'Support', 'Throwables', 'Stratagems', 'Mechas', 'Attachments', 'Armors',
                'Proj. ids', 'Expl. ids', 'Status', 'Presets' }
