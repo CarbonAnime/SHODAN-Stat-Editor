@@ -687,6 +687,9 @@ MOD.langs = {
       ['Blast angle (deg)'] = '爆炸角(度)',
       ['Blast delay (s)'] = '爆炸延迟(秒)',
       ['Blast proximity (m)'] = '爆炸接近度(米)',
+      ['360 fires from any side; with a blast proximity above 0 the round becomes a proximity fuse (measured: 360 and 6 m on the crossbow).'] = '360 表示任意方向都会触发；配合大于 0 的爆炸接近度就是近炸引信（实测：360 + 6 米，弩箭）。',
+      ['only works with the blast angle at 360, and the radius has to be larger than one step of the round: keep it above about speed / frame rate.'] = '只在爆炸角为 360 时生效；半径要大于射弹每帧的位移，建议大于「初速/游戏帧率」。',
+      ['360 with a proximity above 0: a proximity fuse, off from any side.'] = '360 配大于 0 的接近度：近炸引信，任意方向都会起爆。',
       ['Blast radius'] = '爆炸半径',
       ['Blitzer'] = '雷霆',
       ['Block game input while open'] = '打开时屏蔽游戏输入',
@@ -3094,6 +3097,9 @@ MOD.langs = {
       ['Blast angle (deg)'] = '爆炸角(度)',
       ['Blast delay (s)'] = '爆炸延遲(秒)',
       ['Blast proximity (m)'] = '爆炸接近度(米)',
+      ['360 fires from any side; with a blast proximity above 0 the round becomes a proximity fuse (measured: 360 and 6 m on the crossbow).'] = '360 表示任意方向都會觸發；配合大於 0 的爆炸接近度就是近炸引信（實測：360 + 6 公尺，弩箭）。',
+      ['only works with the blast angle at 360, and the radius has to be larger than one step of the round: keep it above about speed / frame rate.'] = '只在爆炸角為 360 時生效；半徑要大於射彈每影格的位移，建議大於「初速/遊戲影格率」。',
+      ['360 with a proximity above 0: a proximity fuse, off from any side.'] = '360 配大於 0 的接近度：近炸引信，任意方向都會起爆。',
       ['Blast radius'] = '爆炸半徑',
       ['Blitzer'] = '閃擊者',
       ['Block game input while open'] = '開啟時遮蔽遊戲輸入',
@@ -5501,6 +5507,9 @@ MOD.langs = {
       ['Blast angle (deg)'] = 'Угол взрыва (град)',
       ['Blast delay (s)'] = 'Задержка взрыва (с)',
       ['Blast proximity (m)'] = 'Дистанция подрыва (м)',
+      ['360 fires from any side; with a blast proximity above 0 the round becomes a proximity fuse (measured: 360 and 6 m on the crossbow).'] = '360 — срабатывает с любой стороны; вместе с дистанцией подрыва больше 0 это радиовзрыватель (проверено: 360 и 6 м на арбалете).',
+      ['only works with the blast angle at 360, and the radius has to be larger than one step of the round: keep it above about speed / frame rate.'] = 'работает только при угле взрыва 360; радиус должен быть больше шага снаряда за кадр — держите его выше скорости / частоты кадров.',
+      ['360 with a proximity above 0: a proximity fuse, off from any side.'] = '360 при дистанции подрыва больше 0: радиовзрыватель, срабатывает с любой стороны.',
       ['Blast radius'] = 'Радиус взрыва',
       ['Blitzer'] = '«Налетчик»',
       ['Block game input while open'] = 'Блокировать ввод в игре',
@@ -9350,6 +9359,9 @@ local function resolve_gun(weapon, key)
                 add_row(weapon, idsec, idp .. f[1], f[2], 'f32', { part(idp .. f[1], T_PROJECTILE, p + f[3], 'f32', 100000) },
                         0, f[4], f[5], f[6])
             end
+            local wangle = add_row(weapon, idsec, idp .. 'blast_angle', 'Blast angle (deg)', 'f32',
+                                    { part(idp .. 'blast_angle', T_PROJECTILE, p + 136, 'f32', 100000) }, 0, 360, 1, 10)
+            wangle.note = '360 with a proximity above 0: a proximity fuse, off from any side.'
         end
         if expiry then blast_id('expiry_explosion', 'Expiry explosion (id)', 156) end
         local first = #blasts
@@ -11171,7 +11183,7 @@ function MOD.records.rows(page)
     page.rows, page.by_id = {}, {}
     if not at then return end
     local function num(section, id, label, off, storage, max, small, big)
-        add_row(page, section, id, label, storage, { part(id, kind, at + off, storage, 100000) }, 0, max, small, big)
+        return add_row(page, section, id, label, storage, { part(id, kind, at + off, storage, 100000) }, 0, max, small, big)
     end
     local function hurt(off, section, what, count)
         local d = read_field(field_at(kind, at + off, 'u32', 100000))
@@ -11195,13 +11207,15 @@ function MOD.records.rows(page)
         impact.note = function()
             return 'sets off: ' .. MOD.records.label(T_EXPLOSION, read_field(impact.parts[1].field))
         end
-        num('Explosion id', 'fuse_proximity', 'Blast proximity (m)', 148, 'f32', 200, 0.1, 1)
+        local prox_row = num('Explosion id', 'fuse_proximity', 'Blast proximity (m)', 148, 'f32', 200, 0.1, 1)
+        prox_row.note = 'only works with the blast angle at 360, and the radius has to be larger than one step of the round: keep it above about speed / frame rate.'
         num('Explosion id', 'fuse_delay', 'Blast delay (s)', 152, 'f32', 30, 0.05, 0.5)
         local expiry = add_row(page, 'Explosion id', 'expiry_explosion', 'Expiry explosion (id)', 'u32',
                                { part('expiry_explosion', kind, at + 156, 'u32', 100000) }, 0, 100000, 1, 10)
         expiry.choice = 'explosion'
         num('Explosion id', 'arming', 'Arming distance (m)', 160, 'f32', 200, 0.1, 1)
-        num('Explosion id', 'blast_angle', 'Blast angle (deg)', 136, 'f32', 180, 1, 10)
+        local angle_row = num('Explosion id', 'blast_angle', 'Blast angle (deg)', 136, 'f32', 360, 1, 10)
+        angle_row.note = '360 fires from any side; with a blast proximity above 0 the round becomes a proximity fuse (measured: 360 and 6 m on the crossbow).'
     elseif kind == T_EXPLOSION then
         hurt(4, 'Explosion', 'Explosion')
         for _, r in ipairs({ { 'inner', 'Inner radius (m)', 16 }, { 'outer', 'Outer radius (m)', 20 },
