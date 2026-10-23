@@ -10,6 +10,11 @@ release can be taken by merging again (see "Taking a new upstream release").
 - **Armoury tab** (`offline/armory.lua`, `offline/armory_data.lua`): armour passives with their effects, stacked
   passives (up to three effects, each with its description), and vehicle part health and armour - rows are
   generated per part instead of a single hull value.
+- **A record you edited stays in the Records tab**: installing a change re-reads every object it touched, and a
+  projectile, explosion or status record page was re-read as if it were a weapon - which emptied it. The list
+  only shows pages that have rows, so that record then vanished from the Records tab and from search for the rest
+  of the session. Record pages no longer go through the weapon pass, keep the rows they already have while the
+  tables are half read, and an empty page is never cached.
 - **A projectile id that can be changed**: a table that holds one block has no other block's salt to borrow, so a
   u32-only change (a projectile id, an explosion id, a shrapnel count) used to end with
   "nothing to vary for the hash" and the whole install aborted. `offline/hostdata.lua` now borrows a nearby

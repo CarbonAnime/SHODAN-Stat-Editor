@@ -1,6 +1,6 @@
 -- HD2-Addon: mods/shodan/stat_editor
 -- SHODAN Stat Editor v3.2.2 by SHODAN. Run by SHODAN Stat Editor Offline (offline/host.lua).
-local MOD = { global = 'ShodanStatEditor', title = 'SHODAN Stat Editor', version = '3.2.2', author = 'SHODAN', log = 'SHODANStatEditor.log' }
+local MOD = { global = 'ShodanStatEditor', title = 'SHODAN Stat Editor', version = '3.2.3', author = 'SHODAN', log = 'SHODANStatEditor.log' }
 -- magazines, heatsinks and ammunition types: the game's names, by the text id of the item (its English text)
 MOD.item_names = {
     [0x046FF548] = '5.5x50mm Ripper',
@@ -11039,6 +11039,9 @@ KINDS[TYPES.seeking].silo_rows = function(weapon)
 end
 
 local function resolve(weapon)
+    -- a record page is not a weapon: its rows come from its own table (MOD.records.rows), and reading it
+    -- as a weapon empties the page, which drops the record out of the Records list
+    if weapon.record then return end
     weapon.rows, weapon.by_id, weapon.aliases, weapon.backpack, weapon.mines, weapon.legacy = {}, {}, nil, nil, nil, nil
     weapon.swaps = nil
     weapon.grenade_swap = nil
@@ -11211,7 +11214,7 @@ end
 -- Records (CarbonAnime, PR #58): the projectile, explosion and status records themselves, by id. Their names: a
 -- projectile's the game's name of its round (MOD.round_names), else the first weapon that fires it; an explosion's
 -- the first weapon that sets it off, else the round that does; a status's its own (Burning, Gas, stuns).
-MOD.records = { pages = {}, list = nil, cache = nil, KINDS = { T_PROJECTILE, T_EXPLOSION, T_STATUS },
+MOD.records = { pages = {}, list = nil, cache = nil, ready = false, KINDS = { T_PROJECTILE, T_EXPLOSION, T_STATUS },
                 WORD = { [T_PROJECTILE] = 'Projectile', [T_EXPLOSION] = 'Explosion', [T_STATUS] = 'Status' },
                 PREFIX = { [T_PROJECTILE] = 'F1', [T_EXPLOSION] = 'F2', [T_STATUS] = 'F3' } }
 function MOD.records.ids(kind)
@@ -11319,10 +11322,22 @@ function MOD.records.shrapnel_rows(entry, section, pre, xrow)
             0, 500, 1, 5)
 end
 -- A record page's rows (page.kind, page.id).
+-- Read a page again, but keep the rows it already has when the tables are only half read (a rescan
+-- reads file by file, so a page built in the middle of one comes out short) or the read trips over
+-- one: a page that loses its rows drops out of the Records list for the rest of the session.
+function MOD.records.rebuild(page)
+    if not MOD.records.ready then return false end   -- a rescan is reading the tables: leave the page as it is
+    local rows, by_id = page.rows, page.by_id
+    local ok = pcall(MOD.records.rows, page)
+    if not ok or #page.rows < (rows and #rows or 0) then page.rows, page.by_id = rows, by_id end
+    return ok
+end
 function MOD.records.rows(page)
     local kind, at = page.kind, tables[page.kind] and tables[page.kind].index[page.id]
-    page.rows, page.by_id = {}, {}
+    -- no table (a rescan nils it for a frame, or it was never read): keep the rows the page has,
+    -- otherwise a page read in that moment stays empty and the record drops out of the list
     if not at then return end
+    page.rows, page.by_id = {}, {}
     local function num(section, id, label, off, storage, max, small, big, lim)
         return add_row(page, section, id, label, storage, { part(id, kind, at + off, storage, lim or 100000) }, 0, max, small, big)
     end
@@ -11450,8 +11465,9 @@ function MOD.records.page(kind, id)
     if page then return page end
     if not (tables[kind] and tables[kind].index[id]) then return nil end
     page = { slot = 'Records', hash = hash, kind = kind, id = id, record = true }
-    MOD.records.rows(page)
+    if not MOD.records.rebuild(page) then return nil end   -- the read tripped: not this time
     MOD.records.title(page)
+    if #page.rows == 0 then return nil end   -- its table is not read yet: do not keep an empty page
     MOD.records.pages[hash] = page
     return page
 end
@@ -11480,8 +11496,8 @@ end
 function MOD.records.refresh()
     MOD.records.cache, MOD.records.list = nil, nil
     for _, page in pairs(MOD.records.pages) do
-        MOD.records.rows(page)
-        MOD.records.title(page)
+        local ok = MOD.records.rebuild(page)
+        if ok and #page.rows > 0 then pcall(MOD.records.title, page) end
     end
 end
 -- a record page's values saved in config.txt or a preset: its page, built when first named
@@ -11521,6 +11537,7 @@ end
 -- Resolves weapons from `next` on until the deadline; true once all are done.
 local function resolve_some(progress, deadline)
     if progress.next == 1 then
+        MOD.records.ready = false
         for _, f in pairs(fields) do f.users = {} end
         KINDS[TYPES.custom].cache = {}
         KINDS[TYPES.throwable].prepare_grenades()
@@ -11533,6 +11550,7 @@ local function resolve_some(progress, deadline)
     end
     if progress.next <= #weapons then return false end
     KINDS[T_PROJECTILE].list_choices()
+    MOD.records.ready = true   -- every table is read: pages can be built and read again
     MOD.records.refresh()
     local usable, strats = 0, 0
     state.attachments, state.throwables, state.passives, state.vehicles = 0, 0, 0, 0
@@ -11658,6 +11676,21 @@ state.records_page = function(what, id)
     local kind = what == 'explosion' and T_EXPLOSION or (what == 'status' and T_STATUS or T_PROJECTILE)
     local ok, page = pcall(MOD.records.page, kind, id)
     return ok and page or nil
+end
+-- the same page read again while its table is gone (a rescan): 'before:during:after:kept'
+state.records_keep = function(what, id)
+    local kind = what == 'explosion' and T_EXPLOSION or (what == 'status' and T_STATUS or T_PROJECTILE)
+    local page = MOD.records.page(kind, id)
+    if not page then return 'no page' end
+    local before = #page.rows
+    local saved = tables[kind]
+    tables[kind] = nil
+    MOD.records.refresh()
+    local during = #page.rows
+    tables[kind] = saved
+    MOD.records.refresh()
+    local kept = MOD.records.pages[string.format('%s%014X', MOD.records.PREFIX[kind], id)] ~= nil
+    return before .. ':' .. during .. ':' .. #page.rows .. ':' .. tostring(kept)
 end
 -- every record page of a kind, in id order (the same rows the panel draws for each)
 state.records_all = function(what)
@@ -12035,7 +12068,9 @@ local function apply_config(deadline)
     end
     -- a saved id can change which rows a weapon should have (an explosion id of 0 takes the shrapnel
     -- rows away, a real one puts them back): build those weapons' pages again, as a click does
-    for _, w in ipairs(touched) do resolve(w) end
+    for _, w in ipairs(touched) do
+        if w.record then MOD.records.rebuild(w) else resolve(w) end
+    end
     if #touched > 0 then ui.version = ui.version + 1 end
     if apply_at <= #pending then return false end
     apply_at = 1
