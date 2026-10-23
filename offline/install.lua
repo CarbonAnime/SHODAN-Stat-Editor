@@ -199,15 +199,44 @@ local function save_list(list)
 end
 
 -- ---------------------------------------------------------------- the originals
+-- The game's own data files for this build ship with the program (originals/*.dl_plain, and originals/build.txt:
+-- the sha256 of the game's own dl_library.dl_typelib). A game folder that was already changed by the player when
+-- the editor first ran - or one whose installed.txt is gone - would else have those values kept as the game's own,
+-- and Restore would put the player's own numbers back. A game update changes the type library, this no longer
+-- matches, and the game's folder is the original again. Returns name -> sealed file, or nil.
+function M.shipped_originals(dir, game)
+    if not dir then return nil end
+    local folder = dir .. '/originals'
+    local stamp = read(folder .. '/build.txt')
+    local build = stamp and stamp:match('(%x+)')
+    if not build then return nil end
+    local typelib = read(game .. '/dl_library.dl_typelib')
+    if not typelib or G.sha256_hex(typelib) ~= build then return nil end
+    local out = {}
+    for _, name in ipairs(M.list_files(folder, '*.dl_plain')) do
+        local text = read(folder .. '/' .. name)
+        if text then out[(name:gsub('%.dl_plain$', '.dl_bin'))] = G.seal_string(text) end
+    end
+    return next(out) and out or nil
+end
+
 -- name -> sealed original for every generated_*.dl_bin, and which of them are ours now (written by an install).
 -- A game file that is not ours is the original, and replaces a kept one that differs (the game was updated).
-function M.originals(game)
+-- shipped: the game's own files for this build (M.shipped_originals): a kept original that differs from them was
+-- never the game's own, so they replace it (and the file on disk).
+function M.originals(game, shipped)
     local list, out, ours, problems = load_list(), {}, {}, {}
     local names = M.list_files(game, 'generated_*.dl_bin')
     local changed = false
     for _, name in ipairs(names) do
         local current = read(game .. '/' .. name)
         local kept = read(M.originals_dir .. '/' .. name)
+        if shipped and shipped[name] then
+            if kept ~= shipped[name] then
+                mkdirs(M.originals_dir)
+                write(M.originals_dir .. '/' .. name, shipped[name])
+            end
+        end
         if current and list[name] and list[name][hash_of(current)] then
             if kept then out[name], ours[name] = kept, true
             else problems[#problems + 1] = name .. ': written by an earlier install, and its original is gone' end

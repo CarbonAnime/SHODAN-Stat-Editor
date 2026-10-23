@@ -47,6 +47,14 @@ release can be taken by merging again (see "Taking a new upstream release").
   nothing. The record page's angle now goes up to 360 (it stopped at 180, and 360 is what the airburst rounds
   use), the weapon page has its own blast angle row, and both hints carry the measured result, including "keep
   the radius above about speed / frame rate" - a 500 m/s bolt covers 4.2 m per 120 Hz tick, so a 3 m sphere is skipped.
+- **The game's own data files ship with it** (offline/originals/): the five generated_* tables of build
+  25988413 in plain form plus a fingerprint of dl_library.dl_typelib. The tool uses them only when that
+  fingerprint matches, Restore always writes them, and a cached original that was really a player's preset
+  is replaced. Loading still starts from the game's current files, so values already installed stay visible.
+- **The last English is translated**: 183 new zh-Hans entries (the swap note under the projectile rows, the
+  proximity-fuse and stratagem hints, armour passives, status names, buttons), one extra sentence rule, and
+  the messages that appear before the panel loads carry their own translation in offline/host.lua, picked
+  from the Windows display language.
 - **Updates come from this fork.** `offline/update.lua` points at `CarbonAnime/SHODAN-Stat-Editor`, so an
   update keeps the armoury; upstream's zip would replace the panel with one that has none.
 

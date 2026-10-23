@@ -24,6 +24,14 @@ for m in ('README-FORK.md', 'CHANGES.txt'):
 for m in ('stat_editor_mcp.py', 'README.md'):
     if os.path.exists(os.path.join(HERE, 'mcp', m)):
         files['mcp/' + m] = os.path.join(HERE, 'mcp', m)
+# the game's own data files for the build this ships for: install.lua checks originals/build.txt against the
+# game's type library, so Restore writes these bytes (and a game folder changed before the first run cannot
+# pass its own values off as the game's own)
+SHIPPED = os.path.join(HERE, 'originals')
+if os.path.isdir(SHIPPED):
+    for m in sorted(os.listdir(SHIPPED)):
+        if m.endswith('.dl_plain') or m == 'build.txt':
+            files['originals/' + m] = os.path.join(SHIPPED, m)
 DEV = re.compile(r'[ \t]*--\[\[DEV\]\].*?--\[\[/DEV\]\][^\n]*\n', re.S)   # test hooks: not in the package
 VERSION = re.search(r"version = '([\d.]+)'", open(PANEL, encoding='utf-8').read()).group(1)
 readme = r"""SHODAN Stat Editor Offline v{version}  (SSEO)

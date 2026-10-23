@@ -53,6 +53,44 @@ local function fatal(text)
     os.exit(1)
 end
 
+-- the messages that can appear before the panel (and its dictionary) is loaded carry their own text, in the
+-- language Windows is set to (the panel picks its first language the same way)
+local function windows_language()
+    pcall(ffi.cdef, 'uint16_t GetUserDefaultUILanguage(void);')
+    local id = ffi.C.GetUserDefaultUILanguage()
+    local primary, sub = id % 1024, math.floor(id / 1024)
+    if primary == 0x04 then return (sub == 2 or sub == 4) and 'zh-Hans' or 'zh-Hant' end
+    if primary == 0x19 then return 'ru' end
+    return 'en'
+end
+local EARLY = {
+    ['zh-Hans'] = {
+        ['Looking for Helldivers 2...'] = '正在查找《绝地潜兵2》……',
+        ["Reading the game's data files..."] = '正在读取游戏数据文件……',
+        ['Finding the stats...'] = '正在查找数值……',
+        ["Helldivers 2 was not found.\n\nWrite the path of its folder (the one holding \"data\") into\n"] =
+            '没找到《绝地潜兵2》。\n\n请把它所在的文件夹路径（里面要有 "data"）写进\n',
+        ['\\game folder.txt\nand start again.'] = '\\game folder.txt\n然后重新启动。',
+        ['No game data files in '] = '这里没有游戏数据文件：',
+        ["None of the game's data files could be read:\n\n"] = '所有游戏数据文件都读不出来：\n\n',
+        ['\n\nVerify the game files in Steam and start again.'] = '\n\n请在 Steam 里校验游戏文件，然后重新启动。',
+        ["Some of the game's data files are not as this editor expects; their stats cannot be edited:\n\n"] =
+            '有些游戏数据文件与本编辑器的预期不一致，这些数值不能编辑：\n\n',
+        ['\n\nIf another tool changed them, verify the game files in Steam.'] = '\n\n如果是别的工具改过，请在 Steam 里校验游戏文件。',
+        ['Could not load '] = '无法载入 ',
+        ['Stat Editor did not start:\n'] = '数值编辑器没能启动：\n',
+        ['Stat Editor did not start (no state).'] = '数值编辑器没能启动（没有状态表）。',
+        ['Updated. Start '] = '已更新。请重新启动 ',
+        [' again.'] = '。',
+        ['SHODAN Stat Editor Offline stopped:\n\n'] = 'SHODAN 数值编辑器（离线版）已停止：\n\n',
+    },
+}
+EARLY['zh-Hant'] = EARLY['zh-Hans']
+local ui_language = windows_language()
+local function early(text)
+    local t = EARLY[ui_language]
+    return t and t[text] or text
+end
 -- ---------------------------------------------------------------- start
 -- where the window was when it last closed: its top left (window.txt: x y)
 local PLACE = I.home .. '/window.txt'
@@ -69,21 +107,36 @@ local function main()
     shim.pump()
     local migrated = I.migrate()
     if migrated then log('copied ' .. migrated .. ' files from the CowboyBingus folder') end
-    screen({ 'SHODAN Stat Editor Offline', 'Looking for Helldivers 2...' })
+    screen({ 'SHODAN Stat Editor Offline', early('Looking for Helldivers 2...') })
     local exe_dir = here:gsub('[/\\]app[/\\]$', ''):gsub('[/\\]$', '')
     local game = I.find_game(exe_dir)
     if not game then
-        fatal('Helldivers 2 was not found.\n\nWrite the path of its folder (the one holding "data") into\n'
-              .. I.home:gsub('/', '\\') .. '\\game folder.txt\nand start again.')
+        fatal(early('Helldivers 2 was not found.\n\nWrite the path of its folder (the one holding "data") into\n')
+              .. I.home:gsub('/', '\\') .. early('\\game folder.txt\nand start again.'))
     end
     log('game: ' .. game)
     AR.log = log
     AR.init(game, I.home .. '/armory.ini')   -- the Armory page's choices (first time: the Forge's own)
     log('hash search: ' .. (G.native and 'native, every core' or 'Lua (shodan_hash.dll not found)'))
-    screen({ 'SHODAN Stat Editor Offline', 'Reading the game\'s data files...' })
+    screen({ 'SHODAN Stat Editor Offline', early('Reading the game\'s data files...') })
     shim.pump()
-    local originals, ours, problems, count = I.originals(game)
-    if count == 0 then fatal('No game data files in ' .. game) end
+    -- the game's own data files for this build, shipped with the program: what Restore puts back, and what a
+    -- kept original that was never the game's own is replaced with (a folder changed before the first run)
+    local shipped = I.shipped_originals(exe_dir, game)
+    if shipped then
+        local n = 0
+        for _ in pairs(shipped) do n = n + 1 end
+        log(string.format('%d of the game\'s own data files ship with the editor (build checked)', n))
+    end
+    local originals, ours, problems, count = I.originals(game, shipped)
+    -- writing: the game's own bytes when they are here, else what the folder held when it was first read
+    local base = originals
+    if shipped then
+        base = {}
+        for name, bytes in pairs(originals) do base[name] = bytes end
+        for name, bytes in pairs(shipped) do base[name] = bytes end
+    end
+    if count == 0 then fatal(early('No game data files in ') .. game) end
     for _, p in ipairs(D.load(game, originals)) do problems[#problems + 1] = p end
     for _, p in ipairs(problems) do log('problem: ' .. p) end
     local loaded = 0
@@ -91,33 +144,31 @@ local function main()
     log(string.format('%d of %d files loaded, %d installed by an earlier install', loaded, count,
         (function() local n = 0; for _ in pairs(ours) do n = n + 1 end return n end)()))
     if loaded == 0 then
-        fatal('None of the game\'s data files could be read:\n\n' .. table.concat(problems, '\n', 1, math.min(#problems, 8))
-              .. '\n\nVerify the game files in Steam and start again.')
+        fatal(early('None of the game\'s data files could be read:\n\n') .. table.concat(problems, '\n', 1, math.min(#problems, 8))
+              .. early('\n\nVerify the game files in Steam and start again.'))
     end
     if #problems > 0 then
-        shim.message_box('Some of the game\'s data files are not as this editor expects; their stats cannot be edited:\n\n'
+        shim.message_box(early('Some of the game\'s data files are not as this editor expects; their stats cannot be edited:\n\n')
                          .. table.concat(problems, '\n', 1, math.min(#problems, 10))
-                         .. '\n\nIf another tool changed them, verify the game files in Steam.', 0x30)
+                         .. early('\n\nIf another tool changed them, verify the game files in Steam.'), 0x30)
     end
 
     -- ------------------------------------------------------------ the editor
-    screen({ 'SHODAN Stat Editor Offline', 'Finding the stats...' })
+    screen({ 'SHODAN Stat Editor Offline', early('Finding the stats...') })
     rawset(_G, 'SHODAN_OFFLINE', true)
     -- the panel's first language (until one is chosen in Settings): Windows' display language, if translated
-    pcall(ffi.cdef, 'uint16_t GetUserDefaultUILanguage(void);')
-    local id = ffi.C.GetUserDefaultUILanguage()
-    local primary, sub = id % 1024, math.floor(id / 1024)
-    if rawget(_G, 'SHODAN_OFFLINE_LANG') == nil then rawset(_G, 'SHODAN_OFFLINE_LANG', primary == 0x04 and ((sub == 2 or sub == 4) and 'zh-Hans' or 'zh-Hant')
-                                      or primary == 0x19 and 'ru' or nil) end
+    if rawget(_G, 'SHODAN_OFFLINE_LANG') == nil then
+        rawset(_G, 'SHODAN_OFFLINE_LANG', ui_language ~= 'en' and ui_language or nil)
+    end
     stingray = shim.engine()
     function update(dt) end
     local editor = arg and arg[1] or here .. 'stat_editor.lua'
     local chunk, why = loadfile(editor)
-    if not chunk then fatal('Could not load ' .. editor .. ':\n' .. tostring(why)) end
+    if not chunk then fatal(early('Could not load ') .. editor .. ':\n' .. tostring(why)) end
     local ok, err = pcall(chunk)
-    if not ok then fatal('Stat Editor did not start:\n' .. tostring(err)) end
+    if not ok then fatal(early('Stat Editor did not start:\n') .. tostring(err)) end
     local state = rawget(_G, 'ShodanStatEditor')
-    if type(state) ~= 'table' then fatal('Stat Editor did not start (no state).') end
+    if type(state) ~= 'table' then fatal(early('Stat Editor did not start (no state).')) end
     local build = U.build(here)   -- app/build.txt: version, commit, channel
     shim.set_title('SHODAN Stat Editor Offline v' .. tostring(state.version)
                    .. (build.channel == 'dev' and build.commit and ' (dev ' .. build.commit:sub(1, 7) .. ')' or ''))
@@ -284,7 +335,7 @@ local function main()
             if c.borrowed and #c.borrowed > 0 then nudged = nudged + 1 end
         end
         for name, mine in pairs(ours) do
-            if mine and not writes[name] then writes[name], back = originals[name], back + 1 end
+            if mine and not writes[name] then writes[name], back = base[name], back + 1 end
         end
         if not next(writes) then
             bar.busy, bar.base = nil, state.writes
@@ -292,14 +343,14 @@ local function main()
             return
         end
         busy('Installing: writing the files...')
-        local done, why = I.write_files(game, writes, originals)
+        local done, why = I.write_files(game, writes, base)
         bar.busy = nil
         if not done then
             log('install failed: ' .. tostring(why))
             say('Not installed: ' .. tostring(why), WARN)
             return
         end
-        for name, data in pairs(writes) do ours[name] = data ~= originals[name] end
+        for name, data in pairs(writes) do ours[name] = data ~= base[name] end
         bar.base = state.writes
         local armor = AR.touches() and ('  ' .. AR.summary()) or ''
         log(string.format('installed: %d changed, %d back to the original, %d had a decimal value borrowed for the hash',
@@ -313,10 +364,11 @@ local function main()
     local function restore()
         if I.game_running() then say('Helldivers 2 is running: close it, then restore.', WARN); return end
         local writes = {}
-        for name, mine in pairs(ours) do if mine then writes[name] = originals[name] end end
+        for name, mine in pairs(ours) do if mine then writes[name] = base[name] end end
+        if shipped then for name, bytes in pairs(shipped) do writes[name] = bytes end end
         if not next(writes) then say('The game\'s own files are already in place.', GOOD); return end
         busy('Restoring the game\'s files...')
-        local done, why = I.write_files(game, writes, originals)
+        local done, why = I.write_files(game, writes, base)
         bar.busy = nil
         if not done then say('Not restored: ' .. tostring(why), WARN); return end
         for name in pairs(writes) do ours[name] = false end
@@ -461,7 +513,7 @@ local function main()
     if bar.restart then
         local go = true
         if go and not U.launch(bar.restart) then
-            shim.message_box('Updated. Start ' .. bar.restart:gsub('/', '\\') .. ' again.', 0x40)
+            shim.message_box(early('Updated. Start ') .. bar.restart:gsub('/', '\\') .. early(' again.'), 0x40)
         end
     end
     log('closed')
@@ -470,5 +522,5 @@ end
 local ok, err = xpcall(main, debug.traceback)
 if not ok then
     log('error: ' .. tostring(err))
-    shim.message_box('SHODAN Stat Editor Offline stopped:\n\n' .. tostring(err), 0x10)
+    shim.message_box(early('SHODAN Stat Editor Offline stopped:\n\n') .. tostring(err), 0x10)
 end
