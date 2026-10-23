@@ -11,6 +11,7 @@ local G = require('gamedata')
 local D = require('hostdata')
 local I = require('install')
 local U = require('update')
+local AR = require('armory')
 
 pcall(ffi.cdef, 'uint64_t GetTickCount64(void);')
 local function clock() return tonumber(ffi.C.GetTickCount64()) / 1000 end
@@ -25,6 +26,7 @@ local function log(text)
 end
 
 local BACK = { 255, 12, 15, 19 }
+local BEZEL = 6                       -- the outline's gap from the window's edge (the panel's too)
 local GOLD, WHITE, MUTED, WARN, GOOD = { 255, 255, 213, 0 }, { 255, 238, 242, 246 }, { 255, 153, 171, 184 },
                                         { 255, 255, 150, 60 }, { 255, 120, 220, 140 }
 
@@ -75,6 +77,8 @@ local function main()
               .. I.home:gsub('/', '\\') .. '\\game folder.txt\nand start again.')
     end
     log('game: ' .. game)
+    AR.log = log
+    AR.init(game, I.home .. '/armory.ini')   -- the Armory page's choices (first time: the Forge's own)
     log('hash search: ' .. (G.native and 'native, every core' or 'Lua (shodan_hash.dll not found)'))
     screen({ 'SHODAN Stat Editor Offline', 'Reading the game\'s data files...' })
     shim.pump()
@@ -122,20 +126,59 @@ local function main()
     if type(state.lang) == 'function' then shim.lang = state.lang end
 
     -- ------------------------------------------------------------ the host's bar (below the panel)
-    local bar = { hover = nil, message = nil, tone = MUTED, busy = nil, base = nil, buttons = {} }
+    local bar = { hover = nil, message = nil, tone = MUTED, note = nil, busy = nil, base = nil, buttons = {} }
+    -- text cut to fit room, a whole character at a time, with an ellipsis (UTF-8 aware)
+    local function cut(text, size, room)
+        local chars = {}
+        for c in text:gmatch('[%z\1-\127\194-\244][\128-\191]*') do chars[#chars + 1] = c end
+        while #chars > 1 and shim.text_width(table.concat(chars) .. '...', size) > room do chars[#chars] = nil end
+        return table.concat(chars) .. '...'
+    end
+
+    -- one line of the bar: the font shrinks to fit room, then the text is cut (nothing overruns its box)
+    local function bar_line(text, x, y, size, smallest, room, colour)
+        room = math.max(40, room)
+        while size > smallest and shim.text_width(text, size) > room do size = size - 0.5 end
+        if shim.text_width(text, size) > room then text = cut(text, size, room) end
+        shim.text(text, x, y, size, colour)
+        return size
+    end
+
+    -- The bar follows the window: the buttons are sized to their labels and squeezed only when the window is
+    -- too narrow for them, and the status text has a row of its own above them.
     local function layout()
-        local s = shim.h / 1080
-        local y0, y1 = 1038 * s, 1072 * s
-        bar.buttons = {
-            { key = 'install', label = 'Install into the game', x0 = 30 * s, x1 = 290 * s, y0 = y0, y1 = y1 },
-            { key = 'restore', label = 'Restore the game\'s files', x0 = 302 * s, x1 = 562 * s, y0 = y0, y1 = y1 },
-        }
-        if bar.release then
-            local x1 = shim.w - 30 * s
-            bar.buttons[3] = { key = 'update', label = 'Update to ' .. bar.release.label, x0 = x1 - 170 * s, x1 = x1,
-                               y0 = 9 * s, y1 = 41 * s, gold = true }   -- top right, in the tagline's place
-        end
+        local s = math.max(0.55, shim.h / 1080)
+        local pad, gap = 30 * s, 12 * s
         bar.s, bar.h = s, shim.h
+        bar.band = 1032 * s                 -- the panel's bottom edge; everything below it is the bar
+        bar.text_y = bar.band + 14 * s      -- the status line, on its own row
+        local y0, y1 = bar.band + 19 * s, shim.h - 3 * s
+        local rows = {
+            { key = 'install', label = 'Install into the game' },
+            { key = 'restore', label = 'Restore the game\'s files' },
+            { key = 'armory', label = 'Armor passives 护甲叠加 (F5)' },
+        }
+        local wanted, total = {}, 0
+        for i, row in ipairs(rows) do
+            local w = shim.text_width(tr(row.label), 15 * s) + 26 * s
+            wanted[i] = math.max(130 * s, math.min(320 * s, w))
+            total = total + wanted[i]
+        end
+        total = total + gap * (#rows - 1)
+        local room = math.max(120 * s, shim.w - pad * 2)
+        local squeeze = total > room and room / total or 1
+        bar.buttons = {}
+        local x = pad
+        for i, row in ipairs(rows) do
+            local w = wanted[i] * squeeze
+            bar.buttons[i] = { key = row.key, label = row.label, x0 = x, x1 = x + w, y0 = y0, y1 = y1 }
+            x = x + w + gap * squeeze
+        end
+        if bar.release then
+            local x1 = shim.w - pad
+            bar.buttons[#bar.buttons + 1] = { key = 'update', label = 'Update to ' .. bar.release.label,
+                                              x0 = x1 - 170 * s, x1 = x1, y0 = 9 * s, y1 = 41 * s, gold = true }
+        end
     end
     layout()
 
@@ -155,11 +198,16 @@ local function main()
 
     local function paint_bar()
         local s = bar.s
-        shim.fill(0, 1032 * s, shim.w, shim.h, BACK)
+        shim.fill(0, bar.band, shim.w, shim.h, BACK)
         shim.fill(0, 0, shim.w, 46 * s, BACK)
         shim.text('SHODAN Stat Editor', 30 * s, 32 * s, 24 * s, GOLD, true)
         local t = tr('OFFLINE  -  edits the game\'s files; they apply when the game starts')
         if not bar.release then shim.text(t, shim.w - 30 * s - shim.text_width(t, 15 * s), 31 * s, 15 * s, MUTED) end
+        -- the status first: it has its own row, so nothing is ever drawn under a button's label
+        local text, tone = status()
+        text = tr(text)
+        if bar.note then text = text .. ' ' .. tr(bar.note) end
+        bar_line(text, 30 * s, bar.text_y, 13 * s, 9 * s, shim.w - 60 * s, tone)
         for _, b in ipairs(bar.buttons) do
             local hovered = bar.hover == b.key and not bar.busy
             shim.fill(b.x0, b.y0, b.x1, b.y1, hovered and { 255, 52, 66, 80 } or { 255, 28, 34, 42 })
@@ -168,18 +216,12 @@ local function main()
             shim.fill(b.x0, b.y0, b.x1, b.y0 + e, edge); shim.fill(b.x0, b.y1 - e, b.x1, b.y1, edge)
             shim.fill(b.x0, b.y0, b.x0 + e, b.y1, edge); shim.fill(b.x1 - e, b.y0, b.x1, b.y1, edge)
             shim.flush()
-            local size, label = 16 * s, tr(b.label)
-            while size > 10 * s and shim.text_width(label, size) > b.x1 - b.x0 - 12 * s do size = size - 0.5 end
+            local size, label, room = 15 * s, tr(b.label), math.max(20, b.x1 - b.x0 - 10 * s)
+            while size > 9 * s and shim.text_width(label, size) > room do size = size - 0.5 end
+            if shim.text_width(label, size) > room then label = cut(label, size, room) end
             shim.text(label, (b.x0 + b.x1 - shim.text_width(label, size)) / 2, (b.y0 + b.y1) / 2 + size * 0.35, size,
                       b.gold and GOLD or WHITE)
         end
-        local text, tone = status()
-        text = tr(text)
-        local x = 576 * s
-        local size = 14 * s
-        local limit = shim.w - 30 * s - x
-        while size > 9 * s and shim.text_width(text, size) > limit do size = size - 0.5 end
-        shim.text(text, x, 1055 * s + size * 0.35, size, tone)
     end
 
     local function paint()
@@ -194,7 +236,7 @@ local function main()
         shim.present()
     end
 
-    local function say(text, tone) bar.message, bar.tone = text, tone or MUTED end
+    local function say(text, tone, note) bar.message, bar.tone, bar.note = text, tone or MUTED, note end
 
     local function busy(text)
         bar.busy = text
@@ -206,8 +248,20 @@ local function main()
     local function install()
         if I.game_running() then say('Helldivers 2 is running: close it, then Install.', WARN); return end
         busy('Installing: finding what changed...')
-        local changes = D.diff()
-        local stacked, why_not = D.stack(changes, state.stacks and state.stacks(), log, state.own_off and state.own_off())
+        local changes, problems = D.diff()
+        if problems and #problems > 0 then
+            for _, c in ipairs(changes) do G.free(c.plain) end
+            bar.busy = nil
+            local first = problems[1]
+            log('install stopped: ' .. first.name .. ': ' .. tostring(first.why))
+            say('Not installed: ' .. first.name .. ' could not be read (' .. tostring(first.why)
+                .. '). Nothing was changed.', WARN)
+            return
+        end
+        -- the Armor page's choices on top of the panel's own passive page: one writer, one hash correction
+        local stacks, own_off, policy = AR.selection(state.stacks and state.stacks() or {},
+                                                     state.own_off and state.own_off() or {}, D.passives())
+        local stacked, why_not = D.stack(changes, stacks, log, own_off, policy)
         if not stacked then
             for _, c in ipairs(changes) do G.free(c.plain) end
             bar.busy = nil
@@ -215,7 +269,7 @@ local function main()
             say('Not installed: the armor passives could not be stacked (' .. tostring(why_not) .. '). Nothing was changed.', WARN)
             return
         end
-        local writes, made, back = {}, 0, 0
+        local writes, made, back, nudged = {}, 0, 0, 0
         for k, c in ipairs(changes) do
             busy(string.format('Installing: preparing %s (%d of %d)...', c.name, k, #changes))
             local sealed, why = D.build(c, function(text) log(c.name .. ': ' .. text); shim.pump() end)
@@ -227,6 +281,7 @@ local function main()
                 return
             end
             writes[c.name], made = sealed, made + 1
+            if c.borrowed and #c.borrowed > 0 then nudged = nudged + 1 end
         end
         for name, mine in pairs(ours) do
             if mine and not writes[name] then writes[name], back = originals[name], back + 1 end
@@ -246,9 +301,13 @@ local function main()
         end
         for name, data in pairs(writes) do ours[name] = data ~= originals[name] end
         bar.base = state.writes
-        log(string.format('installed: %d changed, %d back to the original', made, back))
+        local armor = AR.touches() and ('  ' .. AR.summary()) or ''
+        log(string.format('installed: %d changed, %d back to the original, %d had a decimal value borrowed for the hash',
+            made, back, nudged))
         say(string.format('Installed (%d game files changed%s). Start the game to play with your values.', made,
-            back > 0 and ', ' .. back .. ' back to the original' or ''), GOOD)
+            back > 0 and ', ' .. back .. ' back to the original' or '') .. armor, GOOD,
+            nudged > 0 and 'A file of one block has no spare header room, so one decimal value in it moved a few units'
+                .. ' in the last place: that is how it keeps the hash the game knows.' or nil)
     end
 
     local function restore()
@@ -302,7 +361,7 @@ local function main()
     end
 
     -- ------------------------------------------------------------ the frame loop
-    local painted, was_down, armed, said_ready = nil, false, nil, false
+    local painted, was_down, was_f5, armed, said_ready = nil, false, false, nil, false
     local last = clock()
     while shim.pump() do
         local now = clock()
@@ -344,6 +403,23 @@ local function main()
             end
         end
         -- the bar's buttons
+        -- F5 opens the armor page: it draws instead of the panel, and parks the panel's tick while it is up
+        local f5 = state.phase == 'ready' and shim.focused() and shim.key_down(0x74) or false
+        if f5 and not was_f5 then
+            if AR.is_open() then AR.close() else AR.show() end
+            painted = nil
+        end
+        was_f5 = f5
+        if AR.is_open() then
+            local ok, err = pcall(AR.frame, shim)
+            if not ok then
+                AR.close()
+                log('armory page failed: ' .. tostring(err))
+                say('The armor page stopped: ' .. tostring(err), WARN)
+                painted = nil
+            end
+            shim.sleep(10)
+        else
         local x, y = nil, nil
         if shim.focused() then x, y = shim.cursor() end
         local hover = nil
@@ -356,18 +432,23 @@ local function main()
         if not down and was_down and armed and armed == hover and state.phase == 'ready' then
             bar.message = nil
             if hover == 'install' then install() elseif hover == 'restore' then restore()
+            elseif hover == 'armory' then AR.show(); painted = nil
             elseif hover == 'update' and update_program() then break end
             armed = nil
         end
         was_down = down
+        -- a resized window: the bar re-lays itself out (the panel follows through Gui.resolution)
+        local size = shim.w .. 'x' .. shim.h
+        if size ~= bar.size then bar.size = size; layout(); painted = nil end
         local text = status()
-        local signature = table.concat({ shim.version, state.phase, tostring(state.status), tostring(hover), text,
-                                         shim.lang(), bar.release and bar.release.label or '' }, '|')
+        local signature = table.concat({ shim.version, size, state.phase, tostring(state.status), tostring(hover), text,
+                                         shim.lang(), bar.release and bar.release.label or '', tostring(bar.note) }, '|')
         if signature ~= painted then
             painted = signature
             paint()
         end
         shim.sleep(state.phase == 'ready' and 10 or 1)
+        end
     end
     if shim.place then
         I.mkdirs(I.home)

@@ -2908,6 +2908,48 @@ local function unit_rows(entry, key, section, prefix)
     unit(TYPES.turret, 'turn_v', 'Turn speed, vertical (deg/s)', 8, 'f32', 3600, 1, 10)
 end
 
+-- A mount's rows, by its entity (the entry's key): the parts a vehicle is made of are entities of their own
+-- (an exosuit's left arm is a mount, not a zone of the hull), so each carries its own health component —
+-- health +0, armor +280, the durable ratio +268 and each named zone (38 of 552 bytes from +520). Without
+-- this an arm could only be given weapon values, never the health and armor it has as part of the vehicle.
+-- Rows are prefixed 'part_' to stay clear of the weapon's own.
+KINDS[TYPES.health].part_rows = function(entry, key)
+    local ht = tables[TYPES.health]
+    local at = ht and ht.index[key]
+    if not at then return end
+    local top = ht.copies[1] + HEADER_BYTES
+    if read_field(field_at(TYPES.health, at, 'u32', 1000000)) then
+        add_row(entry, 'Part', 'part_health', 'Health', 'u32',
+                { part('part_health', TYPES.health, at, 'u32', 10000000) }, 0, 1000000, 50, 250)
+    end
+    if read_field(field_at(TYPES.health, at + 280, 'u32', 100)) then
+        add_row(entry, 'Part', 'part_armor', 'Armor', 'u32',
+                { part('part_armor', TYPES.health, at + 280, 'u32', 100) }, 0, 10, 1, 1)
+    end
+    if (read_field(field_at(TYPES.health, at + 268, 'f32', 1)) or 0) > 0 then
+        local row = add_row(entry, 'Part', 'part_durable', 'Durable ratio (0-1)', 'f32',
+                            { part('part_durable', TYPES.health, at + 268, 'f32', 1) }, 0, 1, 0.05, 0.1)
+        row.note = '0: hits deal their normal damage, 1: their durable damage'
+    end
+    local n = 0
+    for z = 0, 37 do
+        local base = at + 520 + z * 552
+        local name = peek4(top + base + 96)
+        if name and name ~= 0 then
+            n = n + 1
+            local label = MOD.vehicle_parts[name] or ('Part ' .. n)
+            local id = 'part_z' .. z
+            if read_field(field_at(TYPES.health, base + 232, 'u32', 1000000)) then
+                add_row(entry, 'Part', id .. '_health', label .. ' health', 'u32',
+                        { part(id .. '_health', TYPES.health, base + 232, 'u32', 10000000) }, 0, 1000000, 50, 250)
+            end
+            if read_field(field_at(TYPES.health, base + 216, 'u32', 100)) then
+                add_row(entry, 'Part', id .. '_armor', label .. ' armor', 'u32',
+                        { part(id .. '_armor', TYPES.health, base + 216, 'u32', 100) }, 0, 10, 1, 1)
+            end
+        end
+    end
+end
 -- A vehicle's rows (by its entity, `key`): its health component: health +0 (i32), armor +280 (the
 -- default zone's), then each damageable zone (38 of 552 bytes from +520; +96 name, 0: unused; +216 armor,
 -- +232 health, -1: none). Zones are named from MOD.vehicle_parts (by the name's hash), else numbered.
@@ -3516,6 +3558,8 @@ local function resolve(weapon)
         unit_rows(weapon, KINDS[TYPES.health].body(weapon.key) or weapon.key, weapon.name:find('^E/') and 'Emplacement' or 'Sentry', 'unit_')
     end
     resolve_gun(weapon, weapon.key)
+    -- a part mounted on a vehicle (an exosuit's arm, a tank's turret): its own health and armor too
+    if weapon.mounted then KINDS[TYPES.health].part_rows(weapon, weapon.key) end
 end
 
 -- The shots a weapon fires besides its projectile, read as the game had them: a second ammo type
@@ -4427,7 +4471,8 @@ local function weapons_in(tab)
     for _, weapon in ipairs(weapons) do
         if #weapon.rows > 0 then
             if words then
-                local name, all = weapon.name:lower(), true
+                -- the panel shows this name translated, so searching in the game's language finds it
+                local name, all = (weapon.name .. ' ' .. settings.tr(weapon.name)):lower(), true
                 for _, word in ipairs(words) do
                     if not name:find(word, 1, true) then all = false; break end
                 end
@@ -5757,8 +5802,33 @@ local function pressed(name, now)
     return false
 end
 
+-- Characters typed into the window, when the host can hand them over. The offline build's window reads
+-- WM_CHAR, so every character the keyboard or an input method makes arrives here; the game's engine has no
+-- such call, and there the keys themselves are read instead (TEXT_KEYS below).
+
+-- the UTF-8 characters of text, one at a time
+local function chars(text)
+    local out = {}
+    for c in text:gmatch('[%z\1-\127\194-\244][\128-\191]*') do out[#out + 1] = c end
+    return out
+end
+
+-- The characters typed since the last frame, or nil when the host cannot hand any over (the game's engine:
+-- there the keys themselves are read, below). Empty (never nil) when nothing was typed this frame.
+local function typed_chars()
+    local app = sr and sr.Application
+    if type(app) ~= 'table' then return nil end
+    local call = rawget(app, 'typed_text')
+    if type(call) ~= 'function' then return nil end
+    local ok, text = pcall(call)
+    if not ok or type(text) ~= 'string' then return {} end
+    return chars(text)
+end
+
 local function keyboard(now)
     local weapon = ui.weapon
+    local typed = typed_chars()   -- drained every frame, so a stray character never lands in a later field
+    local poll = typed == nil     -- no characters to hand over (the game's engine): the keys are read instead
     if ui.binding then
         if pressed('Escape', now) then ui.binding = nil; return end
         for _, name in ipairs({ 'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12',
@@ -5774,49 +5844,66 @@ local function keyboard(now)
         return
     end
     if ui.editing then
-        if pressed('Escape', now) then presets.finish_rename(false); return end
-        if pressed('Enter', now) then presets.finish_rename(true); return end
-        if pressed('Backspace', now) then presets.type_char(false) end
-        for _, vk in ipairs(TEXT_KEYS) do
-            if pressed('T' .. vk, now) then
-                local c = key_char(vk)
-                if c then presets.type_char(c) end
+            if pressed('Escape', now) then presets.finish_rename(false); return end
+            if pressed('Enter', now) then presets.finish_rename(true); return end
+            if pressed('Backspace', now) then presets.type_char(false) end
+            if poll then
+                for _, vk in ipairs(TEXT_KEYS) do
+                    if pressed('T' .. vk, now) then
+                        local c = key_char(vk)
+                        if c then presets.type_char(c) end
+                            end
             end
+        end
+        for _, c in ipairs(typed or {}) do
+            if c ~= '#' then presets.type_char(c) end   -- '#' starts a comment in the preset files
         end
         return
     end
     if ui.value then
         local edit = ui.value
-        if pressed('Escape', now) then finish_value(false); return end
-        if pressed('Enter', now) then finish_value(true); return end
-        if pressed('Backspace', now) then
-            edit.text = edit.fresh and '' or edit.text:sub(1, -2)
-            edit.fresh = false
+        local function add(c)
+            if edit.fresh then edit.text, edit.fresh = '', false end
+            if #edit.text < 16 then edit.text = edit.text .. c end
         end
-        for _, vk in ipairs(TEXT_KEYS) do
-            if pressed('T' .. vk, now) then
-                local c = key_char(vk)
-                if c and c:find('^[%d%.,%-]$') then
-                    if edit.fresh then edit.text, edit.fresh = '', false end
-                    if #edit.text < 16 then edit.text = edit.text .. c end
+            if pressed('Escape', now) then finish_value(false); return end
+            if pressed('Enter', now) then finish_value(true); return end
+            if pressed('Backspace', now) then
+                edit.text = edit.fresh and '' or edit.text:sub(1, -2)
+                edit.fresh = false
+                if poll then
+                for _, vk in ipairs(TEXT_KEYS) do
+                    if pressed('T' .. vk, now) then
+                        local c = key_char(vk)
+                        if c and c:find('^[%d%.,%-]$') then add(c) end
+                    end
                 end
             end
+        end
+        for _, c in ipairs(typed or {}) do
+            if c:find('^[%d%.,%-]$') then add(c) end
         end
         return
     end
     if ui.search.active then
         local search = ui.search
-        if pressed('Escape', now) then ui.search, ui.page = { text = '', active = false }, 1; return end
-        if pressed('Enter', now) then search.active = false; return end
-        if pressed('Backspace', now) then
-            search.text, ui.page = search.text:gsub('[%z\1-\127\194-\244][\128-\191]*$', ''), 1
+        local function add(c)
+            if #search.text + #c <= 40 then search.text, ui.page = search.text .. c, 1 end
         end
-        for _, vk in ipairs(TEXT_KEYS) do
-            if pressed('T' .. vk, now) then
-                local c = key_char(vk)
-                if c and #search.text + #c <= 40 then search.text, ui.page = search.text .. c, 1 end
+            if pressed('Escape', now) then ui.search, ui.page = { text = '', active = false }, 1; return end
+            if pressed('Enter', now) then search.active = false; return end
+            if pressed('Backspace', now) then
+                search.text, ui.page = search.text:gsub('[%z\1-\127\194-\244][\128-\191]*$', ''), 1
+                if poll then
+                for _, vk in ipairs(TEXT_KEYS) do
+                    if pressed('T' .. vk, now) then
+                        local c = key_char(vk)
+                        if c then add(c) end
+                    end
+                end
             end
         end
+        for _, c in ipairs(typed or {}) do add(c) end
         return
     end
     if ui.tab ~= 'Presets' and key_down(VK.Ctrl) and pressed('T70', now) then     -- Ctrl+F
