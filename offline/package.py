@@ -15,8 +15,15 @@ files = {
     'shodan_hash.dll': os.path.join(HERE, 'launcher', 'shodan_hash.dll'),
     'app/stat_editor.lua': PANEL,
 }
-for m in ('host', 'engine_shim', 'install', 'gamedata', 'hostdata', 'update'):
+for m in ('host', 'engine_shim', 'install', 'gamedata', 'hostdata', 'update', 'armory', 'armory_data'):
     files['app/%s.lua' % m] = os.path.join(HERE, m + '.lua')
+# the armory (weapon passives, vehicle parts) and the MCP server, kept by this fork: see README-FORK.md
+for m in ('README-FORK.md', 'CHANGES.txt'):
+    if os.path.exists(os.path.join(HERE, '..', m)):
+        files[m] = os.path.join(HERE, '..', m)
+for m in ('stat_editor_mcp.py', 'README.md'):
+    if os.path.exists(os.path.join(HERE, 'mcp', m)):
+        files['mcp/' + m] = os.path.join(HERE, 'mcp', m)
 DEV = re.compile(r'[ \t]*--\[\[DEV\]\].*?--\[\[/DEV\]\][^\n]*\n', re.S)   # test hooks: not in the package
 VERSION = re.search(r"version = '([\d.]+)'", open(PANEL, encoding='utf-8').read()).group(1)
 readme = r"""SHODAN Stat Editor Offline v{version}  (SSEO)

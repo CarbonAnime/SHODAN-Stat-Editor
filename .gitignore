@@ -7,3 +7,4 @@ offline/launcher/*.obj
 offline/launcher/*.lib
 offline/launcher/*.exp
 offline/launcher/*.res
+__pycache__/

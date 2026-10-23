@@ -19,7 +19,7 @@ for _, declaration in ipairs({
 local C = ffi.C
 
 local M = {}
-M.REPO = 'SHODAN-HORAI/SHODAN-Stat-Editor'
+M.REPO = 'CarbonAnime/SHODAN-Stat-Editor'   -- this fork: its releases carry the armoury too, upstream's would replace it
 M.LATEST = 'https://api.github.com/repos/' .. M.REPO .. '/releases/latest'
 M.PAGE = 'https://github.com/' .. M.REPO .. '/releases/latest'
 M.EVERY_COMMIT = 'https://api.github.com/repos/' .. M.REPO .. '/releases/tags/dev'   -- the development build
