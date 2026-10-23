@@ -51,6 +51,12 @@ release can be taken by merging again (see "Taking a new upstream release").
   25988413 in plain form plus a fingerprint of dl_library.dl_typelib. The tool uses them only when that
   fingerprint matches, Restore always writes them, and a cached original that was really a player's preset
   is replaced. Loading still starts from the game's current files, so values already installed stay visible.
+- **The composed text is translated too**: status-effect rows used to read "Applies: none" and
+  "Status effect 1 strength per shot" because the panel builds those lines while drawing, and the lookup
+  only half-handled capitals (the game names its states Burning, Stun (large)). The lookup now falls
+  back through lower and upper case, and zh-Hans gained 47 stratagem names, 26 state and scope names
+  and 14 composed-sentence rules; a headless sweep of all 452 drawn strings leaves only model codes and
+  key names.
 - **The last English is translated**: 183 new zh-Hans entries (the swap note under the projectile rows, the
   proximity-fuse and stratagem hints, armour passives, status names, buttons), one extra sentence rule, and
   the messages that appear before the panel loads carry their own translation in offline/host.lua, picked
