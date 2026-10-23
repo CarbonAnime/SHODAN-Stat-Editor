@@ -1228,6 +1228,7 @@ MOD.langs = {
       ['Panel side'] = '面板位置',
       ['Panel size'] = '面板大小',
       ['Panels'] = '面板',
+      ['Part'] = '部件',
       ['Partial charge'] = '部分蓄力',
       ['Partial charge explosion'] = '部分蓄力爆炸',
       ['Partial charge shot'] = '部分蓄力射击',
@@ -1642,6 +1643,10 @@ MOD.langs = {
       ['the game\'s tiers: 10 small arms, 20 HMG, 30 autocannon, 40 Strider, 50 orbital, 60 Hellbomb, 250 never'] = '游戏的分级：10 轻武器、20 重机枪、30 机炮、40 蹂躏者、50 轨道、60 地狱炸弹、250 不可摧毁',
       ['the shot fired from this heat on, and what it does to you'] = '从该热量值起发射的弹丸，以及它对你自己造成的效果',
       ['the spare ammo in its backpack; read when the backpack is called in'] = '背包里的备用弹药；在被投放时读取',
+      ['Inherit velocity'] = '继承速度',
+      ['Explosions inherit velocity'] = '爆炸继承速度',
+      ['1: the round keeps the velocity of whoever fired it; 0: it starts from rest.'] = '1：弹丸继承开火者的速度；0：从静止开始。',
+      ['1: the blast this round sets off travels with it; 0: it stays where the round hit.'] = '1：该弹丸引发的爆炸随弹丸移动；0：停在命中处。',
     },
     lower = {
       ['"+ new preset" (or insert) saves your current changes as one; you name it next.'] = '“+ 新建预设”（或 Insert 键）会把当前修改存为一组，接着你可以为它命名。',
@@ -3635,6 +3640,7 @@ MOD.langs = {
       ['Panel side'] = '面板位置',
       ['Panel size'] = '面板大小',
       ['Panels'] = '面板',
+      ['Part'] = '部件',
       ['Partial charge'] = '部分蓄力',
       ['Partial charge explosion'] = '部分蓄力爆炸',
       ['Partial charge shot'] = '部分蓄力射擊',
@@ -4049,6 +4055,10 @@ MOD.langs = {
       ['the game\'s tiers: 10 small arms, 20 HMG, 30 autocannon, 40 Strider, 50 orbital, 60 Hellbomb, 250 never'] = '遊戲的分級：10 輕武器、20 重機槍、30 機炮、40 蹂躪者、50 軌道、60 地獄炸彈、250 不可摧毀',
       ['the shot fired from this heat on, and what it does to you'] = '從該熱量值起發射的射彈，以及它對你自己造成的效果',
       ['the spare ammo in its backpack; read when the backpack is called in'] = '背包裡的備用彈藥；在被投放時讀取',
+      ['Explosions inherit velocity'] = '爆炸繼承速度',
+      ['Inherit velocity'] = '繼承速度',
+      ['1: the round keeps the velocity of whoever fired it; 0: it starts from rest.'] = '1：彈丸繼承開火者的速度；0：由靜止開始。',
+      ['1: the blast this round sets off travels with it; 0: it stays where the round hit.'] = '1：該彈丸引發的爆炸隨彈丸移動；0：停在命中處。',
     },
     lower = {
       ['"+ new preset" (or insert) saves your current changes as one; you name it next.'] = '「+ 新建預設」（或 Insert 鍵）會把當前修改存為一組，接著你可以為它命名。',
@@ -6042,6 +6052,7 @@ MOD.langs = {
       ['Panel side'] = 'Сторона панели',
       ['Panel size'] = 'Размер панели',
       ['Panels'] = 'Секции',
+      ['Part'] = 'Деталь',
       ['Partial charge'] = 'Частичный заряд',
       ['Partial charge explosion'] = 'Взрыв с частичным зарядом',
       ['Partial charge shot'] = 'Выстрел с частичным зарядом',
@@ -6456,6 +6467,10 @@ MOD.langs = {
       ['the game\'s tiers: 10 small arms, 20 HMG, 30 autocannon, 40 Strider, 50 orbital, 60 Hellbomb, 250 never'] = 'уровни игры: 10 стрелковое, 20 тяжелый пулемет, 30 автопушка, 40 Страйдер, 50 орбитальный удар, 60 Адская бомба, 250 никогда',
       ['the shot fired from this heat on, and what it does to you'] = 'выстрел начиная с этого нагрева и его действие на вас',
       ['the spare ammo in its backpack; read when the backpack is called in'] = 'запас боеприпасов в его рюкзаке; читается при вызове рюкзака',
+      ['Explosions inherit velocity'] = 'Взрывы наследуют скорость',
+      ['Inherit velocity'] = 'Наследование скорости',
+      ['1: the round keeps the velocity of whoever fired it; 0: it starts from rest.'] = '1: снаряд сохраняет скорость того, кто стрелял; 0: начинает с нуля.',
+      ['1: the blast this round sets off travels with it; 0: it stays where the round hit.'] = '1: взрыв летит вместе со снарядом; 0: остаётся там, где снаряд попал.',
     },
     lower = {
       ['100kg bomb'] = 'Бомба (100 кг)',
@@ -8481,11 +8496,11 @@ end
 local fields = {}       -- key -> field
 local defaults = {}     -- key -> value before this mod first wrote it
 
-local function field_at(kind, offset, storage, limit)
-    local key = kind .. ':' .. offset
+local function field_at(kind, offset, storage, limit, bit)
+    local key = kind .. ':' .. offset .. (bit and (':' .. bit) or '')
     local f = fields[key]
     if not f then
-        f = { key = key, kind = kind, offset = offset, storage = storage, limit = limit, users = {} }
+        f = { key = key, kind = kind, offset = offset, storage = storage, limit = limit, bit = bit, users = {} }
         fields[key] = f
     end
     return f
@@ -8517,6 +8532,11 @@ local function read_field(f)
     end
     if f.storage == 'grenade' then
         return KINDS[TYPES.throwable].read_entity(api.read(entry.copies[1] + HEADER_BYTES + f.offset, 8))
+    end
+    if f.storage == 'bit' then   -- one bit of a little-endian half word (a projectile +244 flags)
+        local half = api.read(entry.copies[1] + HEADER_BYTES + f.offset, 2)
+        if not half or #half < 2 then return nil end
+        return math.floor((half:byte(1) + half:byte(2) * 256) / 2 ^ f.bit) % 2
     end
     if f.storage == 'flag' then   -- a bool byte
         local b = api.read(entry.copies[1] + HEADER_BYTES + f.offset, 1)
@@ -8559,6 +8579,7 @@ local function write_field(f, value)
     if f.most and value > f.most then value = f.most end
     local bytes, done = nil, {}
     if f.storage == 'tier' then bytes = KINDS[TYPES.destruction].bytes(f, value, read_field(f))
+    elseif f.storage == 'bit' then bytes = string.char(0, 0)   -- filled per copy: its other bits stay
     else bytes = encode(f, value) end
     if not bytes then return false, f.storage == 'tier' and 'no demolition tier there' or 'unknown grenade selection' end
     if f.storage == 'grenade' and value ~= 0 then
@@ -8567,9 +8588,17 @@ local function write_field(f, value)
         ok, why = KINDS[TYPES.throwable].ensure_assets(value)
         if not ok then return false, why end
     end
+    local width = f.storage == 'bit' and 2 or #bytes
     for _, block in ipairs(entry.copies) do
         local at = block + HEADER_BYTES + f.offset
-        local before = api.read(at, #bytes)
+        local before = api.read(at, width)
+        if f.storage == 'bit' and before and #before == 2 then
+            local step = 2 ^ f.bit
+            local half = before:byte(1) + before:byte(2) * 256
+            local want = value >= 0.5 and 1 or 0
+            half = half + (want - math.floor(half / step) % 2) * step
+            bytes = string.char(half % 256, math.floor(half / 256) % 256)
+        end
         if not before then
             for _, undo in ipairs(done) do api.write(undo[1], undo[2]) end
             return false, 'read failed at ' .. hex(at)
@@ -9237,6 +9266,7 @@ local function resolve_gun(weapon, key)
         end
     end
     local blasts = {}
+    local blast_fallback = nil   -- a shot's explosion id rows: where its velocity switches go with no blast
     -- the ids of rows from..to, taken by `prefix` .. their id past `listed` (its prefix): another shot's
     -- for the same memory (listed once), kept so saved values and presets that name them still apply
     local function alias_rows(from, to, listed, prefix)
@@ -9295,13 +9325,29 @@ local function resolve_gun(weapon, key)
         end
         if expiry then blast_id('expiry_explosion', 'Expiry explosion (id)', 156) end
         local first = #blasts
-        if impact and impact > 0 then blasts[#blasts + 1] = { id = impact, prefix = idp .. 'blast', section = xsection, damage = true } end
+        if impact and impact > 0 then blasts[#blasts + 1] = { id = impact, prefix = idp .. 'blast', section = xsection, damage = true, p = p } end
         if expiry and expiry > 0 and expiry ~= impact then
             blasts[#blasts + 1] = { id = expiry, prefix = idp .. 'expiry', section = #blasts > first and (xsection .. ' (expiry)') or xsection,
-                                    damage = true }
+                                    damage = true, p = p }
         end
+        blast_fallback = { section = idsec, p = p, prefix = idp }
+    end
+    -- the projectile's two velocity switches (one bit each of its +244 flags, a half word): whether the round
+    -- keeps the velocity of whoever fired it, and whether the blast it sets off travels with it
+    local function inherit_rows(section, p, prefix)
+        local row = add_row(weapon, section, prefix .. 'inherit_velocity', 'Inherit velocity', 'bit',
+                            { { id = prefix .. 'inherit_velocity',
+                                field = field_at(T_PROJECTILE, p + 244, 'bit', 1, 0) } }, 0, 1, 1, 1)
+        row.after = { '1: the round keeps the velocity of whoever fired it; 0: it starts from rest.' }
+        row.after_h = #row.after * 16 + 6
+        local other = add_row(weapon, section, prefix .. 'explosions_inherit_velocity', 'Explosions inherit velocity', 'bit',
+                              { { id = prefix .. 'explosions_inherit_velocity',
+                                  field = field_at(T_PROJECTILE, p + 244, 'bit', 1, 5) } }, 0, 1, 1, 1)
+        other.after = { '1: the blast this round sets off travels with it; 0: it stays where the round hit.' }
+        other.after_h = #other.after * 16 + 6
     end
     local function explosion_rows()
+        local placed = false   -- the last explosion's section ends with the velocity switches
         for _, blast in ipairs(blasts) do
             local xrow = tables[T_EXPLOSION] and tables[T_EXPLOSION].index[blast.id]
             local before = xrow and exploded[xrow]
@@ -9330,6 +9376,11 @@ local function resolve_gun(weapon, key)
                 -- explosion) and how many (+80)
                 MOD.records.shrapnel_rows(weapon, blast.section == 'Explosion' and 'Shrapnel' or (blast.section .. ' shrapnel'),
                                           blast.prefix .. '_shrapnel', xrow)
+                -- a blast that is there ends the section with the shot's two velocity switches
+                if blast.p and blast == blasts[#blasts] then
+                    inherit_rows(blast.section, blast.p, blast.prefix .. '_')
+                    placed = true
+                end
                 -- the arc it makes (explosion +120 arc type -> arc row: +8 range, +28 chain length, +32 chain
                 -- split, +36 damage row), as a throwable's: the GL-52 De-Escalator's grenade
                 local arc = tables[TYPES.arc] and tables[TYPES.arc].index[read_field(field_at(T_EXPLOSION, xrow + 120, 'u32', 100000)) or -1]
@@ -9356,7 +9407,10 @@ local function resolve_gun(weapon, key)
                 exploded[xrow] = { from = from, to = #weapon.rows, prefix = blast.prefix }
             end
         end
-        blasts = {}
+        if blast_fallback and not placed then
+            inherit_rows(blast_fallback.section, blast_fallback.p, blast_fallback.prefix)
+        end
+        blast_fallback, blasts = nil, {}
     end
     weapon.missile = fire and KINDS[TYPES.seeking].fired(fire)
     if prow then projectile_rows(prow, '', 'Projectile', 'Explosion') end
@@ -10073,6 +10127,49 @@ local function unit_rows(entry, key, section, prefix)
     unit(TYPES.turret, 'turn_v', 'Turn speed, vertical (deg/s)', 8, 'f32', 3600, 1, 10)
 end
 
+-- A part of a vehicle that is an entity of its own (an exosuit's arm, an FRV's turret): the game gives it a
+-- health component of its own — health +0, durable ratio +268, armor +280, and its own zones (named or
+-- numbered) after +520 of 552 bytes — and the mount it hangs from (MountComponentData) is what names the
+-- entry. The vehicle's own rows (below) are the hull's; these are the part's, so an arm can be made
+-- tougher without the body following it. Rows are prefixed 'part_' to stay clear of the weapon's own.
+KINDS[TYPES.health].part_rows = function(entry, key)
+    local ht = tables[TYPES.health]
+    local at = ht and ht.index[key]
+    if not at then return end
+    local top = ht.copies[1] + HEADER_BYTES
+    if read_field(field_at(TYPES.health, at, 'u32', 1000000)) then
+        add_row(entry, 'Part', 'part_health', 'Health', 'u32',
+                { part('part_health', TYPES.health, at, 'u32', 10000000) }, 0, 1000000, 50, 250)
+    end
+    if read_field(field_at(TYPES.health, at + 280, 'u32', 100)) then
+        add_row(entry, 'Part', 'part_armor', 'Armor', 'u32',
+                { part('part_armor', TYPES.health, at + 280, 'u32', 100) }, 0, 10, 1, 1)
+    end
+    if (read_field(field_at(TYPES.health, at + 268, 'f32', 1)) or 0) > 0 then
+        local row = add_row(entry, 'Part', 'part_durable', 'Durable ratio (0-1)', 'f32',
+                            { part('part_durable', TYPES.health, at + 268, 'f32', 1) }, 0, 1, 0.05, 0.1)
+        row.note = '0: hits deal their normal damage, 1: their durable damage'
+    end
+    local n = 0
+    for z = 0, 37 do
+        local base = at + 520 + z * 552
+        local name = peek4(top + base + 96)
+        if name and name ~= 0 then
+            n = n + 1
+            local label = MOD.vehicle_parts[name] or ('Part ' .. n)
+            local id = 'part_z' .. z
+            if read_field(field_at(TYPES.health, base + 232, 'u32', 1000000)) then
+                add_row(entry, 'Part', id .. '_health', label .. ' health', 'u32',
+                        { part(id .. '_health', TYPES.health, base + 232, 'u32', 10000000) }, 0, 1000000, 50, 250)
+            end
+            if read_field(field_at(TYPES.health, base + 216, 'u32', 100)) then
+                add_row(entry, 'Part', id .. '_armor', label .. ' armor', 'u32',
+                        { part(id .. '_armor', TYPES.health, base + 216, 'u32', 100) }, 0, 10, 1, 1)
+            end
+        end
+    end
+end
+
 -- A vehicle's rows (by its entity, `key`): its health component: health +0 (i32), armor +280 (the
 -- default zone's), then each damageable zone (38 of 552 bytes from +520; +96 name, 0: unused; +216 armor,
 -- +232 health, -1: none). Zones are named from MOD.vehicle_parts (by the name's hash), else numbered.
@@ -10684,6 +10781,9 @@ local function resolve(weapon)
         unit_rows(weapon, KINDS[TYPES.health].body(weapon.key) or weapon.key, weapon.name:find('^E/') and 'Emplacement' or 'Sentry', 'unit_')
     end
     resolve_gun(weapon, weapon.key)
+    -- a vehicle's part that is an entity of its own (an exosuit's arm, a tank's turret, an FRV's gun): its
+    -- own health component, armor and durable ratio, which the game reads for that part alone
+    if weapon.mounted then KINDS[TYPES.health].part_rows(weapon, weapon.key) end
 end
 
 -- The shots a weapon fires besides its projectile, read as the game had them: a second ammo type
@@ -11512,6 +11612,7 @@ end
 -- whole list was gone through once. Values that could not be written yet are tried again
 -- later (the table may still be filling), up to 30 times.
 local function apply_config(deadline)
+    local touched = {}
     while apply_at <= #pending do
         local o = pending[apply_at]
         local weapon = by_hash[o.hash]
@@ -11535,6 +11636,7 @@ local function apply_config(deadline)
                     if p.field.storage == 'grenade' then p.field.pending_value = nil end
                 end
                 state.applied = state.applied + 1
+                touched[#touched + 1] = weapon
                 if parts[1].id ~= o.id then   -- saved under an old id: kept under the attachments' own from now on
                     set_override(weapon, { id = o.id }, nil)
                     for _, p in ipairs(parts) do set_override(weapon, p, unless_default(o.value, default_of(p.field))) end
@@ -11562,6 +11664,10 @@ local function apply_config(deadline)
         if keep then apply_at = apply_at + 1 else table.remove(pending, apply_at) end
         if deadline and api.now() >= deadline then break end
     end
+    -- a saved id can change which rows a weapon should have (an explosion id of 0 takes the shrapnel
+    -- rows away, a real one puts them back): build those weapons' pages again, as a click does
+    for _, w in ipairs(touched) do resolve(w) end
+    if #touched > 0 then ui.version = ui.version + 1 end
     if apply_at <= #pending then return false end
     apply_at = 1
     return true
@@ -12116,6 +12222,7 @@ local function change(row, delta_sign, big, exact)
                 if ok then set_override(weapon, p, unless_default(target, d))
                 else log('write refused: ' .. weapon.name .. ' ' .. p.id .. ': ' .. why) end
             end
+            resolve(weapon)   -- another explosion is another section: its damage, radii, shrapnel, switches
             ui.version = ui.version + 1
             return
         end

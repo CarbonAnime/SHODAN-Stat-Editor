@@ -2908,6 +2908,48 @@ local function unit_rows(entry, key, section, prefix)
     unit(TYPES.turret, 'turn_v', 'Turn speed, vertical (deg/s)', 8, 'f32', 3600, 1, 10)
 end
 
+-- A mount's rows, by its entity (the entry's key): the parts a vehicle is made of are entities of their own
+-- (an exosuit's left arm is a mount, not a zone of the hull), so each carries its own health component —
+-- health +0, armor +280, the durable ratio +268 and each named zone (38 of 552 bytes from +520). Without
+-- this an arm could only be given weapon values, never the health and armor it has as part of the vehicle.
+-- Rows are prefixed 'part_' to stay clear of the weapon's own.
+KINDS[TYPES.health].part_rows = function(entry, key)
+    local ht = tables[TYPES.health]
+    local at = ht and ht.index[key]
+    if not at then return end
+    local top = ht.copies[1] + HEADER_BYTES
+    if read_field(field_at(TYPES.health, at, 'u32', 1000000)) then
+        add_row(entry, 'Part', 'part_health', 'Health', 'u32',
+                { part('part_health', TYPES.health, at, 'u32', 10000000) }, 0, 1000000, 50, 250)
+    end
+    if read_field(field_at(TYPES.health, at + 280, 'u32', 100)) then
+        add_row(entry, 'Part', 'part_armor', 'Armor', 'u32',
+                { part('part_armor', TYPES.health, at + 280, 'u32', 100) }, 0, 10, 1, 1)
+    end
+    if (read_field(field_at(TYPES.health, at + 268, 'f32', 1)) or 0) > 0 then
+        local row = add_row(entry, 'Part', 'part_durable', 'Durable ratio (0-1)', 'f32',
+                            { part('part_durable', TYPES.health, at + 268, 'f32', 1) }, 0, 1, 0.05, 0.1)
+        row.note = '0: hits deal their normal damage, 1: their durable damage'
+    end
+    local n = 0
+    for z = 0, 37 do
+        local base = at + 520 + z * 552
+        local name = peek4(top + base + 96)
+        if name and name ~= 0 then
+            n = n + 1
+            local label = MOD.vehicle_parts[name] or ('Part ' .. n)
+            local id = 'part_z' .. z
+            if read_field(field_at(TYPES.health, base + 232, 'u32', 1000000)) then
+                add_row(entry, 'Part', id .. '_health', label .. ' health', 'u32',
+                        { part(id .. '_health', TYPES.health, base + 232, 'u32', 10000000) }, 0, 1000000, 50, 250)
+            end
+            if read_field(field_at(TYPES.health, base + 216, 'u32', 100)) then
+                add_row(entry, 'Part', id .. '_armor', label .. ' armor', 'u32',
+                        { part(id .. '_armor', TYPES.health, base + 216, 'u32', 100) }, 0, 10, 1, 1)
+            end
+        end
+    end
+end
 -- A vehicle's rows (by its entity, `key`): its health component: health +0 (i32), armor +280 (the
 -- default zone's), then each damageable zone (38 of 552 bytes from +520; +96 name, 0: unused; +216 armor,
 -- +232 health, -1: none). Zones are named from MOD.vehicle_parts (by the name's hash), else numbered.
@@ -3516,6 +3558,8 @@ local function resolve(weapon)
         unit_rows(weapon, KINDS[TYPES.health].body(weapon.key) or weapon.key, weapon.name:find('^E/') and 'Emplacement' or 'Sentry', 'unit_')
     end
     resolve_gun(weapon, weapon.key)
+    -- a part mounted on a vehicle (an exosuit's arm, a tank's turret): its own health and armor too
+    if weapon.mounted then KINDS[TYPES.health].part_rows(weapon, weapon.key) end
 end
 
 -- The shots a weapon fires besides its projectile, read as the game had them: a second ammo type

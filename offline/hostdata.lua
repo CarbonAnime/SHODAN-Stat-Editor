@@ -130,6 +130,73 @@ function M.relocate()
     end
 end
 
+-- a float read off a pointer: a plain read never answers nil, but a scan that reaches a buffer the
+-- engine moves under it can, and one nil must not stop the whole install: no value is no candidate
+local function float_at(p, o)
+    local v = ffi.cast('float *', p + o)[0]
+    if v == nil then return nil end
+    v = tonumber(v)
+    if v == nil or v ~= v then return nil end
+    return v
+end
+-- a value with decimals, between 1e-4 and 1e7: what a hash correction can move by a few units in the
+-- last place
+local function decimal(p, o)
+    local v = float_at(p, o)
+    return v ~= nil and math.abs(v) >= 1e-4 and math.abs(v) < 1e7 and u32(p, o) >= 0x38D1B717
+end
+
+-- a record of whole numbers may hold a word that only looks like a float: the fields around it tell - a value
+-- this editor may move sits with other values with decimals (velocity, mass, drag), an id or a count does not
+local function crowded(p, n, at, blocked, resolved)
+    local around = 0
+    for k = -32, 32, 4 do
+        local o = at + k
+        if k ~= 0 and o >= 0 and o + 4 <= n and not blocked[o] and not (resolved and resolved[o]) then
+            local v = decimal(p, o) and float_at(p, o)
+            if v and math.abs(v) >= 1e-3 then around = around + 1 end
+        end
+    end
+    return around >= 2
+end
+
+-- A file of one block has no spare header bytes to vary, so a change with no decimal value in it (an explosion
+-- id, a count) leaves the hash correction nothing to work with: borrow the nearest decimal value of the same
+-- record (a projectile's Caliber, its Drag...) and the correction moves it by under 0.05 %. `words`: the 4-byte
+-- words that changed. No candidate: the table grows instead (see M.build).
+local function borrowing(f, p, n, words)
+    if type(p) ~= 'cdata' then return {} end
+    local blocked = {}
+    for _, h in ipairs(G.headers(p, n)) do for o = h.at, h.at + 23 do blocked[o] = true end end
+    local starts = {}
+    for o in pairs(words) do
+        blocked[o] = true
+        starts[#starts + 1] = o
+    end
+    table.sort(starts)
+    local out, seen = {}, {}
+    for step = 4, 1024, 4 do
+        for _, base in ipairs(starts) do
+            for _, at in ipairs({ base + step, base - step }) do
+                at = at - at % 4
+                if at >= 0 and at + 4 <= n and not seen[at] then
+                    seen[at] = true
+                    local free = true
+                    for k = at, at + 3 do
+                        if blocked[k] or (f.resolved and f.resolved[k]) then free = false; break end
+                    end
+                    local v = free and decimal(p, at) and float_at(p, at)
+                    if v and math.abs(v) >= 1e-3 and crowded(p, n, at, blocked, f.resolved) then
+                        out[#out + 1] = at
+                        if #out >= 6 then return out end
+                    end
+                end
+            end
+        end
+    end
+    return out
+end
+
 -- ---------------------------------------------------------------- what changed
 -- the plain text to install for a file (a new buffer) and the offsets of changed f32-looking words, or nil when
 -- nothing changed. Resolved fields keep their stored bytes.
@@ -155,23 +222,38 @@ local function changes(f)
     -- floats among the changed words (a salt for one-table files): a value with decimals between 1e-4 and 1e7
     local floats = {}
     for o in pairs(words) do
-        local v = ffi.cast('float *', orig + o)[0]
+        local v = float_at(orig, o)
         local i = u32(orig, o)
-        if v == v and math.abs(v) >= 1e-4 and math.abs(v) < 1e7 and i >= 0x38D1B717 then floats[#floats + 1] = o end
+        if v and math.abs(v) >= 1e-4 and math.abs(v) < 1e7 and i >= 0x38D1B717 then floats[#floats + 1] = o end
     end
     table.sort(floats)
-    return orig, n, changed, floats
+    -- nothing with decimals changed: borrow the nearest one of the same record, so a whole-number change can
+    -- still be installed (see borrowing)
+    local borrowed
+    if #floats == 0 then
+        local ok, list = pcall(borrowing, f, orig, n, words)
+        floats = ok and list or {}
+        borrowed = #floats > 0 and floats or nil
+    end
+    return orig, n, changed, floats, borrowed
 end
 
--- every file whose plain text differs from its original: { name, plain, n, bytes, floats }
+-- every file whose plain text differs from its original: { name, plain, n, bytes, floats, borrowed, hash }
+-- and the files that could not be read at all ({ name, why }): one unreadable file must not stop the rest
 function M.diff()
-    local out = {}
+    local out, problems = {}, {}
     for name, f in pairs(M.files) do
-        local plain, n, count, floats = changes(f)
-        if plain then out[#out + 1] = { name = name, plain = plain, n = n, bytes = count, floats = floats, hash = f.hash } end
+        local read, plain, n, count, floats, borrowed = pcall(changes, f)
+        if not read then
+            problems[#problems + 1] = { name = name, why = tostring(plain) }
+        elseif plain then
+            out[#out + 1] = { name = name, plain = plain, n = n, bytes = count, floats = floats,
+                              borrowed = borrowed, hash = f.hash }
+        end
     end
     table.sort(out, function(x, y) return x.name < y.name end)
-    return out
+    table.sort(problems, function(x, y) return x.name < y.name end)
+    return out, problems
 end
 
 -- ---------------------------------------------------------------- passive stacking
@@ -179,10 +261,90 @@ end
 -- they are appended to T's block (payload: 56 bytes, the modifiers at +56, 16 bytes each, then the weapon stat
 -- modifiers, 12 bytes each), so the file grows; the hash correction works at any length.
 -- stacks: target passive id -> { source passive id, ... }; own_off: passive id -> true: its own modifiers left out
--- (only the stacked ones; none: the passive does nothing). Adds to / changes `changes` (from M.diff) in place.
+-- (only the stacked ones; none: the passive does nothing); policy: passive id -> 'stack' | 'strongest' (one value
+-- per effect, the strongest, as the Armory Forge mod does). Adds to / changes `changes` (from M.diff) in place.
 local PASSIVE = 0x63CE0FEB
-function M.stack(changes, stacks, log, own_off)
-    log, stacks, own_off = log or function() end, stacks or {}, own_off or {}
+
+-- a 32-bit word and a float32 read out of a byte string (Lua 5.1 has no string.unpack)
+local u32buf = ffi.new('uint32_t[1]')
+local f32buf = ffi.cast('float *', u32buf)
+local function u32s(b, at)
+    local a1, a2, a3, a4 = b:byte(at, at + 3)
+    return a1 + a2 * 256 + a3 * 65536 + a4 * 16777216
+end
+local function f32s(b, at)
+    u32buf[0] = u32s(b, at)
+    return f32buf[0]
+end
+
+-- the rows of a record's arrays: { key, type, value, bytes } (16-byte modifiers: id, type, value, text;
+-- 12-byte weapon stat modifiers: id, a float, the value)
+local function split_rows(s, width)
+    local out = {}
+    for at = 1, #s - width + 1, width do
+        local b = s:sub(at, at + width - 1)
+        out[#out + 1] = { key = width == 16 and b:sub(1, 8) or b:sub(1, 4),
+                          type = width == 16 and u32s(b, 5) or 2,
+                          value = f32s(b, 9), bytes = b }
+    end
+    return out
+end
+
+-- how strong an effect's value is: a factor counts by how far it is from 1, an amount by its size
+local function strength(typ, v)
+    if typ == 2 then
+        if v <= 0 then return math.huge end
+        return math.abs(math.log(v))
+    end
+    return math.abs(v)
+end
+
+-- one effect may arrive from several passives: an identical value is written once; 'strongest' keeps only the
+-- strongest of them
+local function collapse(rows, policy)
+    local order, groups = {}, {}
+    for _, r in ipairs(rows) do
+        local g = groups[r.key]
+        if not g then g = {}; groups[r.key] = g; order[#order + 1] = r.key end
+        local dup = false
+        for _, u in ipairs(g) do if u.value == r.value then dup = true; break end end
+        if not dup then g[#g + 1] = r end
+    end
+    local out = {}
+    for _, key in ipairs(order) do
+        local g = groups[key]
+        if #g > 1 and policy == 'strongest' then
+            local best = g[1]
+            for i = 2, #g do
+                if strength(g[i].type, g[i].value) > strength(best.type, best.value) then best = g[i] end
+            end
+            g = { best }
+        end
+        for _, r in ipairs(g) do out[#out + 1] = r.bytes end
+    end
+    return table.concat(out)
+end
+
+-- the record's own rows, then the stacked ones: a row already there (same effect and value) is written once
+local function append_unique(existing, extra, width)
+    local seen, out = {}, {}
+    for at = 1, #existing - width + 1, width do
+        local b = existing:sub(at, at + width - 1)
+        seen[b:sub(1, 12)] = true
+        out[#out + 1] = b
+    end
+    for at = 1, #extra - width + 1, width do
+        local b = extra:sub(at, at + width - 1)
+        -- a copied modifier's description id points into the other passive's text: clear it, the effect stays
+        if width == 16 then b = b:sub(1, 12) .. '\0\0\0\0' end
+        local k = b:sub(1, 12)
+        if not seen[k] then seen[k] = true; out[#out + 1] = b end
+    end
+    return table.concat(out)
+end
+
+function M.stack(changes, stacks, log, own_off, policy)
+    log, stacks, own_off, policy = log or function() end, stacks or {}, own_off or {}, policy or {}
     local any = next(own_off) ~= nil
     for _, list in pairs(stacks) do if #list > 0 then any = true end end
     if not any then return true end
@@ -221,16 +383,21 @@ function M.stack(changes, stacks, log, own_off)
         local P = h.at + 24
         local id = h.type == PASSIVE and h.size >= 56 and u32(p, P)
         local own, list = id and blocks[id], id and stacks[id]
-        local mods, stats, names = own and own.mods, own and own.stats, {}
-        if own and own_off[id] then mods, stats = '', '' end
+        local mods, stats, names = '', '', {}
+        if own and not own_off[id] then mods, stats = own.mods, own.stats end
+        local add_m, add_s = {}, {}
         for _, s in ipairs(own and list or {}) do
             if s ~= id and blocks[s] then
-                mods, stats = mods .. blocks[s].mods, stats .. blocks[s].stats
+                for _, r in ipairs(split_rows(blocks[s].mods, 16)) do add_m[#add_m + 1] = r end
+                for _, r in ipairs(split_rows(blocks[s].stats, 12)) do add_s[#add_s + 1] = r end
                 names[#names + 1] = tostring(s)
             elseif s ~= id then
-                log('passive ' .. s .. ' (stacked on ' .. id .. ') is not in this game\'s file: left out')
+                log('passive ' .. s .. ' (stacked on ' .. id .. ') is not in this game file: left out')
             end
         end
+        local pol = policy[id] or 'stack'
+        mods = append_unique(mods, collapse(add_m, pol), 16)
+        stats = append_unique(stats, collapse(add_s, pol), 12)
         local block_end = k < #hs and hs[k + 1].at or n
         if #names > 0 or (own and own_off[id]) then
             local head = ffi.new('uint8_t[80]')
@@ -244,9 +411,9 @@ function M.stack(changes, stacks, log, own_off)
             ffi.cast('uint32_t *', payload + 40)[0] = sc
             out[#out + 1] = ffi.string(head, 80) .. mods .. stats
             out[#out + 1] = ffi.string(p + P + h.size, block_end - P - h.size)                   -- any padding after
-            log(string.format('passive %d: %s, stacked %s (%d modifiers, %d weapon stat modifiers)', id,
-                own_off[id] and 'own effects off' or 'own effects on', #names > 0 and table.concat(names, ', ') or 'none',
-                mc, sc))
+            log(string.format('passive %d: %s, stacked %s (%d modifiers, %d weapon stat modifiers, %s)', id,
+                own_off[id] and 'own effects off' or 'own effects on',
+                #names > 0 and table.concat(names, ', ') or 'none', mc, sc, pol))
             done = done + 1
         else
             out[#out + 1] = ffi.string(p + h.at, block_end - h.at)
@@ -260,6 +427,22 @@ function M.stack(changes, stacks, log, own_off)
     -- the edited floats moved: the other headers' reserved bytes salt the hash correction
     c.plain, c.n, c.bytes, c.floats = grown, #s, c.bytes + #s - n, {}
     return true
+end
+
+-- the passive ids this game's file holds: the Armory page's "all armor" profile applies to those without one
+function M.passives()
+    local f
+    for _, file in pairs(M.files) do
+        for _, h in ipairs(G.headers(file.p, file.n)) do if h.type == PASSIVE then f = file; break end end
+        if f then break end
+    end
+    local ids = {}
+    if not f then return ids end
+    for _, h in ipairs(G.headers(f.p, f.n)) do
+        if h.type == PASSIVE and h.size >= 56 then ids[#ids + 1] = u32(f.p, h.at + 24) end
+    end
+    table.sort(ids)
+    return ids
 end
 
 -- seal one changed file: { name, sealed } or nil, why
@@ -279,9 +462,11 @@ function M.build(change, log)
         change.plain, change.n, change.floats = grown, salt + 16, { salt }
         log(string.format('no float among the changes: the table grows by %d bytes for the hash correction', salt + 16 - n))
     end
-    local ok, why = G.correct(change.plain, change.n, change.hash, change.floats, log)
+    local called, ok, why = pcall(G.correct, change.plain, change.n, change.hash, change.floats, log)
+    if not called then G.free(change.plain); return nil, tostring(ok) end
     if not ok then G.free(change.plain); return nil, why end
-    local sealed = G.seal(change.plain, change.n)
+    local sealed_at, sealed = pcall(G.seal, change.plain, change.n)
+    if not sealed_at then G.free(change.plain); return nil, tostring(sealed) end
     local back, m = G.open_sealed(sealed)
     local good = back and m == change.n and ffi.C.memcmp(back, change.plain, m) == 0 and G.murmur64(back, m) == change.hash
     if back then G.free(back) end
