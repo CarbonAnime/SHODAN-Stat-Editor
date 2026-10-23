@@ -4471,7 +4471,8 @@ local function weapons_in(tab)
     for _, weapon in ipairs(weapons) do
         if #weapon.rows > 0 then
             if words then
-                local name, all = weapon.name:lower(), true
+                -- the panel shows this name translated, so searching in the game's language finds it
+                local name, all = (weapon.name .. ' ' .. settings.tr(weapon.name)):lower(), true
                 for _, word in ipairs(words) do
                     if not name:find(word, 1, true) then all = false; break end
                 end
@@ -5801,8 +5802,33 @@ local function pressed(name, now)
     return false
 end
 
+-- Characters typed into the window, when the host can hand them over. The offline build's window reads
+-- WM_CHAR, so every character the keyboard or an input method makes arrives here; the game's engine has no
+-- such call, and there the keys themselves are read instead (TEXT_KEYS below).
+
+-- the UTF-8 characters of text, one at a time
+local function chars(text)
+    local out = {}
+    for c in text:gmatch('[%z\1-\127\194-\244][\128-\191]*') do out[#out + 1] = c end
+    return out
+end
+
+-- The characters typed since the last frame, or nil when the host cannot hand any over (the game's engine:
+-- there the keys themselves are read, below). Empty (never nil) when nothing was typed this frame.
+local function typed_chars()
+    local app = sr and sr.Application
+    if type(app) ~= 'table' then return nil end
+    local call = rawget(app, 'typed_text')
+    if type(call) ~= 'function' then return nil end
+    local ok, text = pcall(call)
+    if not ok or type(text) ~= 'string' then return {} end
+    return chars(text)
+end
+
 local function keyboard(now)
     local weapon = ui.weapon
+    local typed = typed_chars()   -- drained every frame, so a stray character never lands in a later field
+    local poll = typed == nil     -- no characters to hand over (the game's engine): the keys are read instead
     if ui.binding then
         if pressed('Escape', now) then ui.binding = nil; return end
         for _, name in ipairs({ 'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12',
@@ -5818,49 +5844,66 @@ local function keyboard(now)
         return
     end
     if ui.editing then
-        if pressed('Escape', now) then presets.finish_rename(false); return end
-        if pressed('Enter', now) then presets.finish_rename(true); return end
-        if pressed('Backspace', now) then presets.type_char(false) end
-        for _, vk in ipairs(TEXT_KEYS) do
-            if pressed('T' .. vk, now) then
-                local c = key_char(vk)
-                if c then presets.type_char(c) end
+            if pressed('Escape', now) then presets.finish_rename(false); return end
+            if pressed('Enter', now) then presets.finish_rename(true); return end
+            if pressed('Backspace', now) then presets.type_char(false) end
+            if poll then
+                for _, vk in ipairs(TEXT_KEYS) do
+                    if pressed('T' .. vk, now) then
+                        local c = key_char(vk)
+                        if c then presets.type_char(c) end
+                            end
             end
+        end
+        for _, c in ipairs(typed or {}) do
+            if c ~= '#' then presets.type_char(c) end   -- '#' starts a comment in the preset files
         end
         return
     end
     if ui.value then
         local edit = ui.value
-        if pressed('Escape', now) then finish_value(false); return end
-        if pressed('Enter', now) then finish_value(true); return end
-        if pressed('Backspace', now) then
-            edit.text = edit.fresh and '' or edit.text:sub(1, -2)
-            edit.fresh = false
+        local function add(c)
+            if edit.fresh then edit.text, edit.fresh = '', false end
+            if #edit.text < 16 then edit.text = edit.text .. c end
         end
-        for _, vk in ipairs(TEXT_KEYS) do
-            if pressed('T' .. vk, now) then
-                local c = key_char(vk)
-                if c and c:find('^[%d%.,%-]$') then
-                    if edit.fresh then edit.text, edit.fresh = '', false end
-                    if #edit.text < 16 then edit.text = edit.text .. c end
+            if pressed('Escape', now) then finish_value(false); return end
+            if pressed('Enter', now) then finish_value(true); return end
+            if pressed('Backspace', now) then
+                edit.text = edit.fresh and '' or edit.text:sub(1, -2)
+                edit.fresh = false
+                if poll then
+                for _, vk in ipairs(TEXT_KEYS) do
+                    if pressed('T' .. vk, now) then
+                        local c = key_char(vk)
+                        if c and c:find('^[%d%.,%-]$') then add(c) end
+                    end
                 end
             end
+        end
+        for _, c in ipairs(typed or {}) do
+            if c:find('^[%d%.,%-]$') then add(c) end
         end
         return
     end
     if ui.search.active then
         local search = ui.search
-        if pressed('Escape', now) then ui.search, ui.page = { text = '', active = false }, 1; return end
-        if pressed('Enter', now) then search.active = false; return end
-        if pressed('Backspace', now) then
-            search.text, ui.page = search.text:gsub('[%z\1-\127\194-\244][\128-\191]*$', ''), 1
+        local function add(c)
+            if #search.text + #c <= 40 then search.text, ui.page = search.text .. c, 1 end
         end
-        for _, vk in ipairs(TEXT_KEYS) do
-            if pressed('T' .. vk, now) then
-                local c = key_char(vk)
-                if c and #search.text + #c <= 40 then search.text, ui.page = search.text .. c, 1 end
+            if pressed('Escape', now) then ui.search, ui.page = { text = '', active = false }, 1; return end
+            if pressed('Enter', now) then search.active = false; return end
+            if pressed('Backspace', now) then
+                search.text, ui.page = search.text:gsub('[%z\1-\127\194-\244][\128-\191]*$', ''), 1
+                if poll then
+                for _, vk in ipairs(TEXT_KEYS) do
+                    if pressed('T' .. vk, now) then
+                        local c = key_char(vk)
+                        if c then add(c) end
+                    end
+                end
             end
         end
+        for _, c in ipairs(typed or {}) do add(c) end
         return
     end
     if ui.tab ~= 'Presets' and key_down(VK.Ctrl) and pressed('T70', now) then     -- Ctrl+F

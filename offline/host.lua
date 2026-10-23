@@ -26,6 +26,7 @@ local function log(text)
 end
 
 local BACK = { 255, 12, 15, 19 }
+local BEZEL = 6                       -- the outline's gap from the window's edge (the panel's too)
 local GOLD, WHITE, MUTED, WARN, GOOD = { 255, 255, 213, 0 }, { 255, 238, 242, 246 }, { 255, 153, 171, 184 },
                                         { 255, 255, 150, 60 }, { 255, 120, 220, 140 }
 
@@ -116,20 +117,58 @@ local function main()
 
     -- ------------------------------------------------------------ the host's bar (below the panel)
     local bar = { hover = nil, message = nil, tone = MUTED, note = nil, busy = nil, base = nil, buttons = {} }
+    -- text cut to fit room, a whole character at a time, with an ellipsis (UTF-8 aware)
+    local function cut(text, size, room)
+        local chars = {}
+        for c in text:gmatch('[%z\1-\127\194-\244][\128-\191]*') do chars[#chars + 1] = c end
+        while #chars > 1 and shim.text_width(table.concat(chars) .. '...', size) > room do chars[#chars] = nil end
+        return table.concat(chars) .. '...'
+    end
+
+    -- one line of the bar: the font shrinks to fit room, then the text is cut (nothing overruns its box)
+    local function bar_line(text, x, y, size, smallest, room, colour)
+        room = math.max(40, room)
+        while size > smallest and shim.text_width(text, size) > room do size = size - 0.5 end
+        if shim.text_width(text, size) > room then text = cut(text, size, room) end
+        shim.text(text, x, y, size, colour)
+        return size
+    end
+
+    -- The bar follows the window: the buttons are sized to their labels and squeezed only when the window is
+    -- too narrow for them, and the status text has a row of its own above them.
     local function layout()
-        local s = shim.h / 1080
-        local y0, y1 = 1038 * s, 1072 * s
-        bar.buttons = {
-            { key = 'install', label = 'Install into the game', x0 = 30 * s, x1 = 290 * s, y0 = y0, y1 = y1 },
-            { key = 'restore', label = 'Restore the game\'s files', x0 = 302 * s, x1 = 562 * s, y0 = y0, y1 = y1 },
-            { key = 'armory', label = 'Armor passives 护甲叠加 (F5)', x0 = 574 * s, x1 = 834 * s, y0 = y0, y1 = y1 },
-        }
-        if bar.release then
-            local x1 = shim.w - 30 * s
-            bar.buttons[#bar.buttons + 1] = { key = 'update', label = 'Update to ' .. bar.release.label, x0 = x1 - 170 * s, x1 = x1,
-                               y0 = 9 * s, y1 = 41 * s, gold = true }   -- top right, in the tagline's place
-        end
+        local s = math.max(0.55, shim.h / 1080)
+        local pad, gap = 30 * s, 12 * s
         bar.s = s
+        bar.band = 1032 * s                 -- the panel's bottom edge; everything below it is the bar
+        bar.text_y = bar.band + 14 * s      -- the status line, on its own row
+        local y0, y1 = bar.band + 19 * s, shim.h - 3 * s
+        local rows = {
+            { key = 'install', label = 'Install into the game' },
+            { key = 'restore', label = 'Restore the game\'s files' },
+            { key = 'armory', label = 'Armor passives 护甲叠加 (F5)' },
+        }
+        local wanted, total = {}, 0
+        for i, row in ipairs(rows) do
+            local w = shim.text_width(tr(row.label), 15 * s) + 26 * s
+            wanted[i] = math.max(130 * s, math.min(320 * s, w))
+            total = total + wanted[i]
+        end
+        total = total + gap * (#rows - 1)
+        local room = math.max(120 * s, shim.w - pad * 2)
+        local squeeze = total > room and room / total or 1
+        bar.buttons = {}
+        local x = pad
+        for i, row in ipairs(rows) do
+            local w = wanted[i] * squeeze
+            bar.buttons[i] = { key = row.key, label = row.label, x0 = x, x1 = x + w, y0 = y0, y1 = y1 }
+            x = x + w + gap * squeeze
+        end
+        if bar.release then
+            local x1 = shim.w - pad
+            bar.buttons[#bar.buttons + 1] = { key = 'update', label = 'Update to ' .. bar.release.label,
+                                              x0 = x1 - 170 * s, x1 = x1, y0 = 9 * s, y1 = 41 * s, gold = true }
+        end
     end
     layout()
 
@@ -149,11 +188,16 @@ local function main()
 
     local function paint_bar()
         local s = bar.s
-        shim.fill(0, 1032 * s, shim.w, shim.h, BACK)
+        shim.fill(0, bar.band, shim.w, shim.h, BACK)
         shim.fill(0, 0, shim.w, 46 * s, BACK)
         shim.text('SHODAN Stat Editor', 30 * s, 32 * s, 24 * s, GOLD, true)
         local t = tr('OFFLINE  -  edits the game\'s files; they apply when the game starts')
         if not bar.release then shim.text(t, shim.w - 30 * s - shim.text_width(t, 15 * s), 31 * s, 15 * s, MUTED) end
+        -- the status first: it has its own row, so nothing is ever drawn under a button's label
+        local text, tone = status()
+        text = tr(text)
+        if bar.note then text = text .. ' ' .. tr(bar.note) end
+        bar_line(text, 30 * s, bar.text_y, 13 * s, 9 * s, shim.w - 60 * s, tone)
         for _, b in ipairs(bar.buttons) do
             local hovered = bar.hover == b.key and not bar.busy
             shim.fill(b.x0, b.y0, b.x1, b.y1, hovered and { 255, 52, 66, 80 } or { 255, 28, 34, 42 })
@@ -162,19 +206,12 @@ local function main()
             shim.fill(b.x0, b.y0, b.x1, b.y0 + e, edge); shim.fill(b.x0, b.y1 - e, b.x1, b.y1, edge)
             shim.fill(b.x0, b.y0, b.x0 + e, b.y1, edge); shim.fill(b.x1 - e, b.y0, b.x1, b.y1, edge)
             shim.flush()
-            local size, label = 16 * s, tr(b.label)
-            while size > 10 * s and shim.text_width(label, size) > b.x1 - b.x0 - 12 * s do size = size - 0.5 end
+            local size, label, room = 15 * s, tr(b.label), math.max(20, b.x1 - b.x0 - 10 * s)
+            while size > 9 * s and shim.text_width(label, size) > room do size = size - 0.5 end
+            if shim.text_width(label, size) > room then label = cut(label, size, room) end
             shim.text(label, (b.x0 + b.x1 - shim.text_width(label, size)) / 2, (b.y0 + b.y1) / 2 + size * 0.35, size,
                       b.gold and GOLD or WHITE)
         end
-        local text, tone = status()
-        text = tr(text)
-        if bar.note then text = text .. ' ' .. tr(bar.note) end
-        local x = 576 * s
-        local size = 14 * s
-        local limit = shim.w - 30 * s - x
-        while size > 9 * s and shim.text_width(text, size) > limit do size = size - 0.5 end
-        shim.text(text, x, 1055 * s + size * 0.35, size, tone)
     end
 
     local function paint()
@@ -389,8 +426,11 @@ local function main()
             armed = nil
         end
         was_down = down
+        -- a resized window: the bar re-lays itself out (the panel follows through Gui.resolution)
+        local size = shim.w .. 'x' .. shim.h
+        if size ~= bar.size then bar.size = size; layout(); painted = nil end
         local text = status()
-        local signature = table.concat({ shim.version, state.phase, tostring(state.status), tostring(hover), text,
+        local signature = table.concat({ shim.version, size, state.phase, tostring(state.status), tostring(hover), text,
                                          shim.lang(), bar.release and bar.release.label or '', tostring(bar.note) }, '|')
         if signature ~= painted then
             painted = signature
