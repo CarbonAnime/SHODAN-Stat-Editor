@@ -9820,10 +9820,11 @@ local function resolve_gun(weapon, key)
                           'f32', rf, 0, 60, 0.1, 0.5)
             if r and known then r.zero = known end
         end
-        -- +1: you can move while reloading; off on the weapons that hold you still (the Autocannon, MG-43...):
-        -- a row there only (not on vehicle guns: you are not walking)
-        if reload and not item and not weapon.mounted
-           and default_of(field_at(TYPES.reload, reload + 1, 'flag', 1)) == 0 then
+        -- +1: you can move while reloading; off on the weapons that hold you still (the Autocannon, MG-43...).
+        -- The row is there whether the flag is off or on: it used to appear only while it was off, so once you
+        -- turned it on the row vanished, and the value saved in config.txt then had nowhere to go
+        -- ('has no stat reload_move'). Not on vehicle guns: you are not walking there.
+        if reload and not item and not weapon.mounted then
             add_row(weapon, 'Ammo', 'reload_move', 'Move while reloading', 'flag',
                     { part('reload_move', TYPES.reload, reload + 1, 'flag', 1) }, 0, 1, 1, 1)
         end
