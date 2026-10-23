@@ -61,6 +61,9 @@ for _, declaration in ipairs({
     'int TextOutW(void *dc, int x, int y, const uint16_t *text, int count);',
     'int GetTextExtentPoint32W(void *dc, const uint16_t *text, int count, int32_t *size);',
     'int GdiFlush(void);',
+    'uint64_t GetTickCount64(void);',
+    'typedef struct { void *hwnd; uint32_t message; uint32_t pad; uintptr_t wparam; intptr_t lparam;'
+        .. ' uint32_t time, x, y, private_; } host_msg;',
 }) do pcall(ffi.cdef, declaration) end
 
 local user, gdi, kernel = ffi.load('user32'), ffi.load('gdi32'), ffi.C
@@ -81,6 +84,55 @@ function M.message_box(text, kind)   -- kind: 0x10 error, 0x30 warning, 0x40 inf
 end
 
 -- ---------------------------------------------------------------- the window and its back buffer
+-- ---------------------------------------------------------------- text typed into the window
+-- The window procedure is Windows' own, so the characters the window receives arrive as WM_CHAR: the keyboard's,
+-- and an input method's Chinese or any other script. They are taken out of the message queue in pump() and
+-- handed to the panel, which uses them instead of reading the keys: an input method takes the keys it composes
+-- with before they make characters, so keys read on their own would type the pinyin (and the digit that picks a
+-- candidate) next to the character the input method commits, and a Chinese input method takes the digits too.
+local typed, typed_at, typed_high = {}, 0, nil
+local TYPED_KEEP = 2   -- seconds a character waits for the panel (dropped if the panel was not there)
+
+local function now_ms() return tonumber(kernel.GetTickCount64()) end
+
+local function utf8_of(code)
+    if code < 0x80 then return string.char(code) end
+    if code < 0x800 then return string.char(0xC0 + math.floor(code / 0x40), 0x80 + code % 0x40) end
+    if code < 0x10000 then
+        return string.char(0xE0 + math.floor(code / 0x1000), 0x80 + math.floor(code / 0x40) % 0x40,
+                           0x80 + code % 0x40)
+    end
+    return string.char(0xF0 + math.floor(code / 0x40000), 0x80 + math.floor(code / 0x1000) % 0x40,
+                       0x80 + math.floor(code / 0x40) % 0x40, 0x80 + code % 0x40)
+end
+
+-- One UTF-16 code unit of WM_CHAR (a surrogate pair arrives as two). Control characters are dropped: Enter,
+-- Tab and the like are keys the panel reads itself, not text.
+function M.push_typed(code)
+    if not code or code < 0x20 or code == 0x7F then return end
+    if code >= 0xD800 and code < 0xDC00 then typed_high = code; return end
+    local point = code
+    if code >= 0xDC00 and code < 0xE000 then
+        if not typed_high then return end
+        point, typed_high = 0x10000 + (typed_high - 0xD800) * 0x400 + (code - 0xDC00), nil
+    else
+        typed_high = nil
+    end
+    typed[#typed + 1] = utf8_of(point)
+    while #typed > 64 do table.remove(typed, 1) end
+    typed_at = now_ms()
+end
+
+-- The characters typed since the last call ('' when there were none)
+function M.take_typed()
+    if #typed == 0 then return '' end
+    local text = table.concat(typed)
+    for k = #typed, 1, -1 do typed[k] = nil end
+    typed_high = nil
+    if now_ms() - typed_at > TYPED_KEEP * 1000 then return '' end
+    return text
+end
+
 local PANEL_W, PANEL_H = 1060, 1080   -- the panel (1000 wide) and its margins, in 1080p units
 local STYLE = 0x00CA0000   -- WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX (no resizing)
 
@@ -181,14 +233,18 @@ function M.open(title, place)
     return M.window
 end
 
-local msg = ffi.new('uint8_t[64]')
+local msg = ffi.new('host_msg')
 -- Handles the window's messages; false once the window is closed. A window moved onto another screen is sized
 -- for that one (moving it is Windows' own loop inside DispatchMessageW: this runs once it is let go).
 -- M.place: the window's top left, while it is not minimized.
 function M.pump()
     while user.PeekMessageW(msg, nil, 0, 0, 1) ~= 0 do
-        user.TranslateMessage(msg)
-        user.DispatchMessageW(msg)
+        if msg.message == 0x0102 then   -- WM_CHAR: a character for the panel, an input method's own included
+            M.push_typed(tonumber(msg.wparam))
+        else
+            user.TranslateMessage(msg)
+            user.DispatchMessageW(msg)
+        end
     end
     if M.window == nil or user.IsWindow(M.window) == 0 then return false end
     if user.IsIconic(M.window) == 0 then
@@ -331,6 +387,8 @@ function M.engine()
             main_world = function() return main_world end,
             worlds = function() return { main_world, overlay_world } end,
             can_get = function() return true end,
+            -- the characters typed into the window (an input method's Chinese included; see take_typed)
+            typed_text = function() return M.take_typed() end,
         },
         World = {
             create_screen_gui = function(world)
