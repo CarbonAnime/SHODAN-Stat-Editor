@@ -34,6 +34,11 @@ release can be taken by merging again (see "Taking a new upstream release").
 - **Every value button clicks again in a wide window**: the value row's click region is registered before its
   five buttons instead of over them, so `--`, `-`, `+`, `++` and `R` reach the buttons; the scroll bar and the
   page buttons move with the value column instead of staying at a fixed x.
+- **A proximity fuse that works**: the blast angle (+136) and the blast proximity (+148) have to move together -
+  the angle to 360 and the radius large enough. A crossbow bolt bursts in flight at 360 with 6 m; 3 m at 80 did
+  nothing. The record page's angle now goes up to 360 (it stopped at 180, and 360 is what the airburst rounds
+  use), the weapon page has its own blast angle row, and both hints carry the measured result, including "keep
+  the radius above about speed / frame rate" - a 500 m/s bolt covers 4.2 m per 120 Hz tick, so a 3 m sphere is skipped.
 - **Updates come from this fork.** `offline/update.lua` points at `CarbonAnime/SHODAN-Stat-Editor`, so an
   update keeps the armoury; upstream's zip would replace the panel with one that has none.
 
@@ -69,3 +74,7 @@ v3.2.1 起：射弹与爆炸记录页补齐了游戏自带数据里的字段（�
 武器页也加了模拟步数、寿命、随机寿命与最大跳弹数；并修好了宽窗口下数值列右侧 --/-/+/++/R 点不动、
 以及滚动条错位的问题。
 更新源指向本 Fork 的 Releases，因此点"更新"不会把魔改版换回原版。
+v3.2.2 起：近炸引信可用 —— 爆炸角（+136）必须 360、爆炸接近度（+148）必须够大，实测 CB-9 弩箭 360° + 6 米在飞行中起爆；
+射弹页爆炸角上限放宽到 360、武器页新增爆炸角行，说明里写明实测结论与「半径建议大于初速/120」。
+MCP 服务器补齐 blast_angle / fuse_proximity / fuse_delay / arming / sim_steps / lifetime_random / max_ricochets 字段，
+并修正 lifetime 的偏移（+52，原先是 +56 随机寿命）。

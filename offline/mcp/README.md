@@ -102,7 +102,7 @@ tables, then its projectile, that projectile's damage record, then the explosion
 | magazine | `capacity`, `magazines`, `refill`, `max_magazines`, `reload_threshold`, `chambered` |
 | reload | `reload_time` |
 | weapon heat | `overheat_temperature`, `warning_temperature`, `emission_temperature`, `heat_per_shot`, `cooling`, `cooling_overheated`, `firing_charge`, `charge_gain`, `charge_loss`, `reset_charge` |
-| projectile | `calibre`, `pellets`, `speed`, `mass`, `drag`, `gravity`, `lifetime`, `damage_id`, `pen_slowdown`, `impact_explosion`, `expiry_explosion` |
+| projectile | `calibre`, `pellets`, `speed`, `mass`, `drag`, `gravity`, `sim_steps`, `lifetime`, `lifetime_random`, `damage_id`, `pen_slowdown`, `blast_angle`, `impact_explosion`, `fuse_proximity`, `fuse_delay`, `expiry_explosion`, `arming`, `max_ricochets` |
 | damage | `damage`, `durable`, `ap_direct`, `ap_slight`, `ap_large`, `ap_extreme`, `demolition`, `stagger`, `push`, `element` |
 | explosion | `damage_id`, `inner_radius`, `outer_radius`, `shockwave`, `fragments`, `fragment_projectile`, `arc` |
 

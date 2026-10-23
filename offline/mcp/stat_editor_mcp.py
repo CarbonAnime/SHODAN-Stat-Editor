@@ -422,9 +422,13 @@ FIELDS = {
     },
     'projectile': {
         'calibre': (24, 'f32'), 'pellets': (28, 'u32'), 'speed': (32, 'f32'), 'mass': (36, 'f32'),
-        'drag': (40, 'f32'), 'gravity': (44, 'f32'), 'lifetime': (56, 'f32'),
+        'drag': (40, 'f32'), 'gravity': (44, 'f32'), 'sim_steps': (48, 'u32'),
+        'lifetime': (52, 'f32'), 'lifetime_random': (56, 'f32'),
         'damage_id': (60, 'u32'), 'pen_slowdown': (64, 'f32'),
-        'impact_explosion': (144, 'u32'), 'expiry_explosion': (156, 'u32'),
+        'blast_angle': (136, 'f32'), 'impact_explosion': (144, 'u32'),
+        'fuse_proximity': (148, 'f32'), 'fuse_delay': (152, 'f32'),
+        'expiry_explosion': (156, 'u32'), 'arming': (160, 'f32'),
+        'max_ricochets': (180, 'u32'),
     },
     'damage': {
         'damage': (4, 'i32'), 'durable': (8, 'i32'),

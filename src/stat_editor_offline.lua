@@ -1,6 +1,6 @@
 -- HD2-Addon: mods/shodan/stat_editor
--- SHODAN Stat Editor v3.2.1 by SHODAN. Run by SHODAN Stat Editor Offline (offline/host.lua).
-local MOD = { global = 'ShodanStatEditor', title = 'SHODAN Stat Editor', version = '3.2.1', author = 'SHODAN', log = 'SHODANStatEditor.log' }
+-- SHODAN Stat Editor v3.2.2 by SHODAN. Run by SHODAN Stat Editor Offline (offline/host.lua).
+local MOD = { global = 'ShodanStatEditor', title = 'SHODAN Stat Editor', version = '3.2.2', author = 'SHODAN', log = 'SHODANStatEditor.log' }
 -- magazines, heatsinks and ammunition types: the game's names, by the text id of the item (its English text)
 MOD.item_names = {
     [0x046FF548] = '5.5x50mm Ripper',
@@ -1000,6 +1000,7 @@ MOD.langs = {
       ['Impact damage taken'] = '受到冲击伤害',
       ['Impact explosion (id)'] = '命中爆炸 (ID)',
       ['Impact flag (+140)'] = '撞击标志(+140)',
+    ['Can expire after impact (+140)'] = '撞击后可失效(+140)',
       ['Incendiary'] = '燃烧弹',
       ['Incendiary Impact'] = '燃烧冲击弹',
       ['Incinerator FRV'] = '炽灼型快速侦察载具',
@@ -1679,6 +1680,9 @@ MOD.langs = {
       ['Explosions inherit velocity'] = '爆炸继承速度',
       ['1: the round keeps the velocity of whoever fired it; 0: it starts from rest.'] = '1：弹丸继承开火者的速度；0：从静止开始。',
       ['1: the blast this round sets off travels with it; 0: it stays where the round hit.'] = '1：该弹丸引发的爆炸随弹丸移动；0：停在命中处。',
+      ['Tested: 360 plus a 6 m proximity bursts the round in flight.'] = '实测：360 配 6 米接近度，弹丸在飞行中起爆。',
+      ['Tested in game: 360 together with a 6 m blast proximity bursts crossbow bolts in flight.'] = '实测：爆炸角 360 配 6 米接近度，弩箭在飞行中起爆。',
+      ['Tested: 3 m at 80 did nothing, 6 m at 360 bursts; keep the radius above about speed / frame rate.'] = '实测：3 米/80° 无反应、6 米/360° 起爆；半径建议大于「初速/游戏帧率」。',
     },
     lower = {
       ['"+ new preset" (or insert) saves your current changes as one; you name it next.'] = '“+ 新建预设”（或 Insert 键）会把当前修改存为一组，接着你可以为它命名。',
@@ -3444,6 +3448,7 @@ MOD.langs = {
       ['Impact damage taken'] = '受到衝擊傷害',
       ['Impact explosion (id)'] = '命中爆炸 (ID)',
       ['Impact flag (+140)'] = '撞擊標誌(+140)',
+    ['Can expire after impact (+140)'] = '撞擊後可失效(+140)',
       ['Incendiary'] = '燃燒彈',
       ['Incendiary Impact'] = '衝擊燃燒彈',
       ['Incinerator FRV'] = '焚燒者FRV',
@@ -5888,6 +5893,7 @@ MOD.langs = {
       ['Impact damage taken'] = 'Получаемый урон от ударов',
       ['Impact explosion (id)'] = 'Взрыв при попадании (ID)',
       ['Impact flag (+140)'] = 'Флаг удара (+140)',
+    ['Can expire after impact (+140)'] = 'Истекает после удара (+140)',
       ['Incendiary'] = '«Зажигательная»',
       ['Incendiary Impact'] = 'Зажигательная ударная',
       ['Incinerator FRV'] = 'Огнеметная МТР',
@@ -9492,6 +9498,11 @@ local function resolve_gun(weapon, key)
             impact_row.note = function() return 'sets off: ' .. MOD.records.label(T_EXPLOSION, read_field(impact_row.parts[1].field)) end
         end
         if impact and impact > 0 then
+            local arow = add_row(weapon, idsec, idp .. 'blast_angle', 'Blast angle (deg)', 'f32',
+                                 { part(idp .. 'blast_angle', T_PROJECTILE, p + 136, 'f32', 100000) }, 0, 360, 1, 10)
+            arow.after = { '360 with a blast proximity above 0: a proximity fuse, off from any side.',
+                        'Tested: 360 plus a 6 m proximity bursts the round in flight.' }
+            arow.after_h = #arow.after * 16 + 6
             for _, f in ipairs({ { 'fuse_proximity', 'Blast proximity (m)', 148, 200, 0.1, 1 },
                                  { 'fuse_delay', 'Blast delay (s)', 152, 30, 0.05, 0.5 } }) do
                 add_row(weapon, idsec, idp .. f[1], f[2], 'f32', { part(idp .. f[1], T_PROJECTILE, p + f[3], 'f32', 100000) },
@@ -11313,7 +11324,7 @@ function MOD.records.rows(page)
     page.rows, page.by_id = {}, {}
     if not at then return end
     local function num(section, id, label, off, storage, max, small, big, lim)
-        add_row(page, section, id, label, storage, { part(id, kind, at + off, storage, lim or 100000) }, 0, max, small, big)
+        return add_row(page, section, id, label, storage, { part(id, kind, at + off, storage, lim or 100000) }, 0, max, small, big)
     end
     local function hurt(off, section, what, count)
         local d = read_field(field_at(kind, at + off, 'u32', 100000))
@@ -11336,14 +11347,24 @@ function MOD.records.rows(page)
         num('Damage', 'pen_slowdown', 'Penetration slowdown', 64, 'f32', 100, 0.05, 0.25)
         -- the angle it goes off at, then the blasts it can set off: on impact (+144), this close to a target
         -- (+148, a flak fuse), this long after a hit (+152), on expiry (+156), and how far it must fly first
-        num('Explosion id', 'blast_angle', 'Blast angle (deg)', 136, 'f32', 180, 1, 10)
+        local angle_row = num('Explosion id', 'blast_angle', 'Blast angle (deg)', 136, 'f32', 360, 1, 10)
+        angle_row.after = { 'The cone the round has to come in on to go off: 360 with a blast proximity above 0 is a',
+                            'proximity fuse that fires from any side (the game\'s own flak airburst rounds use it);',
+                            '80 or 90, as most rounds have it, only fires from the front.',
+                            'Tested in game: 360 together with a 6 m blast proximity bursts crossbow bolts in flight.' }
+        angle_row.after_h = #angle_row.after * 16 + 6
         local impact = add_row(page, 'Explosion id', 'impact_explosion', 'Impact explosion (id)', 'u32',
                                { part('impact_explosion', kind, at + 144, 'u32', 100000) }, 0, 100000, 1, 10)
         impact.choice = 'explosion'
         impact.note = function()
             return 'sets off: ' .. MOD.records.label(T_EXPLOSION, read_field(impact.parts[1].field))
         end
-        num('Explosion id', 'fuse_proximity', 'Blast proximity (m)', 148, 'f32', 200, 0.1, 1)
+        local prox_row = num('Explosion id', 'fuse_proximity', 'Blast proximity (m)', 148, 'f32', 200, 0.1, 1)
+        prox_row.after = { 'Above 0 the round goes off this many metres from a target it flies past (a proximity',
+                           'fuse); it needs an impact or expiry explosion to set off, and a blast angle of 360',
+                           'to fire from any side rather than only head on.',
+                           'Tested: 3 m at 80 did nothing, 6 m at 360 bursts; keep the radius above about speed / frame rate.' }
+        prox_row.after_h = #prox_row.after * 16 + 6
         num('Explosion id', 'fuse_delay', 'Blast delay (s)', 152, 'f32', 30, 0.05, 0.5)
         local expiry = add_row(page, 'Explosion id', 'expiry_explosion', 'Expiry explosion (id)', 'u32',
                                { part('expiry_explosion', kind, at + 156, 'u32', 100000) }, 0, 100000, 1, 10)
@@ -11354,9 +11375,9 @@ function MOD.records.rows(page)
         num('Surface', 'decal', 'Decal size', 168, 'f32', 20, 0.1, 1)
         num('Surface', 'surface_impact', 'Surface impact type', 172, 'u32', 200, 1, 5)
         num('Surface', 'ricochet_impact', 'Ricochet impact type', 176, 'u32', 200, 1, 5)
-        local flag = add_row(page, 'Surface', 'impact_flag', 'Impact flag (+140)', 'flag',
+        local flag = add_row(page, 'Surface', 'impact_flag', 'Can expire after impact (+140)', 'flag',
                              { part('impact_flag', kind, at + 140, 'flag', 1) }, 0, 1, 1, 1)
-        flag.after = { '0 for flak and cluster rounds; 1 for every other round in this build.' }
+        flag.after = { '0 for the flak and cluster rounds that fly on through a hit; 1 for every other round.' }
         flag.after_h = #flag.after * 16 + 6
         num('Surface', 'thruster', 'Thruster effect length (s)', 88, 'f32', 60, 0.05, 0.5)
         -- when it ricochets instead of stopping
