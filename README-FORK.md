@@ -24,6 +24,16 @@ release can be taken by merging again (see "Taking a new upstream release").
   translations, and the search box matches the translated name as well.
 - **An MCP server** (`offline/mcp/stat_editor_mcp.py`): an AI assistant can list weapons, read a weapon's stats,
   set a stat, install or restore, over stdio. `--game DIR` edits a copy instead of the live install.
+- **The rows the game's own data has, shown by name**: the projectile and explosion record pages now carry
+  simulation steps, lifetime and its randomness, decal size, both impact types, the full ricochet block (max
+  ricochets, threshold angle and speed, angle loss, both spreads), the effect templates (hit effect, fire,
+  status volume, raycast), the three audio events, the +244 flag half word with the two bits that have a name,
+  and - on an explosion - terrain deformation, surface impact, noise and wind templates and the arc type.
+  Weapon pages gained simulation steps, lifetime, lifetime randomness and max ricochets. The enum fields show
+  the game's own number: this build ships no name table, so the editor names nothing it cannot prove.
+- **Every value button clicks again in a wide window**: the value row's click region is registered before its
+  five buttons instead of over them, so `--`, `-`, `+`, `++` and `R` reach the buttons; the scroll bar and the
+  page buttons move with the value column instead of staying at a fixed x.
 - **Updates come from this fork.** `offline/update.lua` points at `CarbonAnime/SHODAN-Stat-Editor`, so an
   update keeps the armoury; upstream's zip would replace the panel with one that has none.
 
@@ -52,6 +62,10 @@ label in `src/stat_editor_offline.lua`. Keep upstream's behaviour and re-apply t
 
 ## 中文说明
 
-本 Fork 在上游 v3.2.0 基础上保留并整合了魔改内容：军械库页（护甲被动、载具部件血量与护甲）、可修改发射的
+本 Fork 在上游 v3.2.1 基础上保留并整合了魔改内容：军械库页（护甲被动、载具部件血量与护甲）、可修改发射的
 射弹 ID（借盐修复，单块表也能装机）、支持输入法打中文搜索、窗口可缩放、三语言名称与搜索、以及 MCP 服务器。
+v3.2.1 起：射弹与爆炸记录页补齐了游戏自带数据里的字段（模拟步数、寿命与随机寿命、贴花尺寸、表面/跳弹碰撞类型、
+跳弹整组、效果模板、音频事件、标志位位域；爆炸页另有弹坑/地形形变、表面碰撞、噪音与风效模板、电弧类型），
+武器页也加了模拟步数、寿命、随机寿命与最大跳弹数；并修好了宽窗口下数值列右侧 --/-/+/++/R 点不动、
+以及滚动条错位的问题。
 更新源指向本 Fork 的 Releases，因此点"更新"不会把魔改版换回原版。

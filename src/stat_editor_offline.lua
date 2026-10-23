@@ -1,6 +1,6 @@
 -- HD2-Addon: mods/shodan/stat_editor
--- SHODAN Stat Editor v3.2.0 by SHODAN. Run by SHODAN Stat Editor Offline (offline/host.lua).
-local MOD = { global = 'ShodanStatEditor', title = 'SHODAN Stat Editor', version = '3.2.0', author = 'SHODAN', log = 'SHODANStatEditor.log' }
+-- SHODAN Stat Editor v3.2.1 by SHODAN. Run by SHODAN Stat Editor Offline (offline/host.lua).
+local MOD = { global = 'ShodanStatEditor', title = 'SHODAN Stat Editor', version = '3.2.1', author = 'SHODAN', log = 'SHODANStatEditor.log' }
 -- magazines, heatsinks and ammunition types: the game's names, by the text id of the item (its English text)
 MOD.item_names = {
     [0x046FF548] = '5.5x50mm Ripper',
@@ -421,6 +421,7 @@ MOD.langs = {
       ['+ Stims (start, max)'] = '治疗剂数量（初始 / 上限）',
       ['+ Throwables (start, max)'] = '手雷数量（初始 / 上限）',
       ['0 = normal projectile; - / + selects a throwable grenade by name above.'] = '0 = 常规弹丸；- / + 按上方名称选择投掷手雷。',
+      ['0 for flak and cluster rounds; 1 for every other round in this build.'] = '本版本中仅高射炮弹与集束炸弹为 0，其余射弹为 1。',
       ['0: hits deal their normal damage, 1: their durable damage (the weapon\'s lower one)'] = '0：命中造成常规伤害；1：造成耐久伤害（取武器两者中较低的一项）',
       ['100kg Bomb'] = '100KG炸弹',
       ['100kg Bomb Mk2'] = '100KG炸弹 MK2',
@@ -599,8 +600,10 @@ MOD.langs = {
       ['AR/GL-21 One-Two'] = 'AR/GL-21 幺二',
       ['AR/GL-21 One-Two (grenade launcher)'] = 'AR/GL-21 幺二（下挂榴弹发射器）',
       ['ARC'] = '电弧',
+      ['Arc type'] = '电弧类型',
       ['ARC-12 Blitzer'] = 'ARC-12 雷霆',
       ['ARC-3 Arc Thrower'] = 'ARC-3 电弧发射器',
+      ['Audio'] = '音效',
       ['AX/AR-23 "Guard Dog"'] = 'AX/AR-23 “护卫犬”',
       ['AX/ARC-3 "Guard Dog" K-9'] = 'AX/ARC-3 “护卫犬” K-9',
       ['AX/FLAM-75 "Guard Dog" Hot Dog'] = 'AX/FLAM-75 “护卫犬”热狗',
@@ -777,6 +780,7 @@ MOD.langs = {
       ['Cruise speed (m/s)'] = '巡航速度(米/秒)',
       ['DAMAGE'] = '伤害',
       ['DBS-2 Double Freedom'] = 'DBS-2 双重自由',
+      ['Decal size'] = '投射贴花尺寸',
       ['DEPLOYER'] = '部署舱',
       ['DIRECT HIT'] = '直击',
       ['Dagger'] = '匕首',
@@ -818,6 +822,7 @@ MOD.langs = {
       ['EAT-17 Expendable Anti-Tank (SEAF)'] = 'EAT-17 消耗性反坦克武器（SEAF）',
       ['EAT-411 Leveller'] = 'EAT-411 荡平者',
       ['EAT-700 Expendable Napalm'] = 'EAT-700 消耗性凝固汽油弹',
+      ['Effects'] = '效果',
       ['EMS Mortar Sentry'] = '电磁冲击波迫击哨戒炮',
       ['EXO-45 Patriot Exosuit'] = 'EXO-45 “爱国者”外骨骼装甲',
       ['EXO-49 Emancipator Exosuit'] = 'EXO-49 “解放者”外骨骼装甲',
@@ -867,6 +872,8 @@ MOD.langs = {
       ['Extra Padding'] = '额外垫料',
       ['FAF-14 Spear'] = 'FAF-14 飞矛',
       ['FIRE'] = '开火',
+      ['Fire template'] = '火焰模板',
+      ['Flags'] = '标志位',
       ['FLAM-40 Flamethrower'] = 'FLAM-40 火焰喷射器',
       ['FLAM-66 Torcher'] = 'FLAM-66 火炬手',
       ['Feet First'] = '护腿为上',
@@ -953,6 +960,7 @@ MOD.langs = {
       ['Gunner FRV'] = '炮手快速侦察载具',
       ['Gunslinger'] = '神枪手',
       ['HANDLING'] = '操控',
+      ['Hit effect damage type'] = '命中效果伤害类型',
       ['HMG Emplacement'] = '重机枪部署支架',
       ['Halt'] = '止息',
       ['Handling'] = '操控',
@@ -991,6 +999,7 @@ MOD.langs = {
       ['Impact'] = '冲击弹',
       ['Impact damage taken'] = '受到冲击伤害',
       ['Impact explosion (id)'] = '命中爆炸 (ID)',
+      ['Impact flag (+140)'] = '撞击标志(+140)',
       ['Incendiary'] = '燃烧弹',
       ['Incendiary Impact'] = '燃烧冲击弹',
       ['Incinerator FRV'] = '炽灼型快速侦察载具',
@@ -1028,6 +1037,7 @@ MOD.langs = {
       ['LAS-98 Laser Cannon (crewed mount)'] = 'LAS-98 激光大炮（乘员炮座）',
       ['LAS-99 Quasar Cannon'] = 'LAS-99 类星体加农炮',
       ['LASER DAMAGE'] = '激光伤害',
+      ['Lifetime randomness (s)'] = '随机寿命(秒)',
       ['LIFT-182 Warp Pack'] = 'LIFT-182 传送背包',
       ['LIFT-850 Jump Pack'] = 'LIFT-850 喷射背包',
       ['LIFT-860 Hover Pack'] = 'LIFT-860 悬浮背包',
@@ -1095,6 +1105,7 @@ MOD.langs = {
       ['M7S SMG'] = 'M7S 冲锋枪',
       ['M90A Shotgun'] = 'M90A 霰弹枪',
       ['MA5C Assault Rifle'] = 'MA5C 突击步枪',
+      ['Max ricochets'] = '最大跳弹数',
       ['MG-206 Heavy Machine Gun'] = 'MG-206 重机枪',
       ['MG-206 Heavy Machine Gun (mounted B)'] = 'MG-206 重机枪（固定式 B）',
       ['MG-43 Machine Gun'] = 'MG-43 机枪',
@@ -1151,6 +1162,7 @@ MOD.langs = {
       ['No changes: loading it puts every value back to the game\'s.'] = '没有修改：读取它会把所有数值恢复为游戏原值。',
       ['No presets yet.'] = '还没有预设。',
       ['Noise'] = '噪音',
+      ['Noise template'] = '噪音模板',
       ['Normal projectile'] = '常规弹丸',
       ['Not offered by the game: a laser built on the Scythe. Settings: Unlock LAS-22 Shear.'] = '游戏本身未提供：基于“收割者”改造的激光武器。设置项：解锁 LAS-22 剪刀。',
       ['Not used by any weapon or stratagem in this list.'] = '本列表中的武器与战备都没有用到它。',
@@ -1223,6 +1235,7 @@ MOD.langs = {
       ['PLAS-45 Epoch'] = 'PLAS-45 纪元',
       ['PRESETS'] = '预设',
       ['PROJECTILE'] = '弹丸',
+      ['Projectile flags (bits)'] = '射弹标志位(位域)',
       ['PROJECTILE SWAP'] = '弹种交换',
       ['Pacifier'] = '安抚者',
       ['Panel side'] = '面板位置',
@@ -1271,6 +1284,15 @@ MOD.langs = {
       ['R-63CS Diligence Counter Sniper'] = 'R-63CS 反狙击“勤勉”',
       ['R-72 Censor'] = 'R-72 审查官',
       ['R/40-K Hot-Shot Marksman Rifle'] = 'R/40-K 高能精确射手步枪',
+      ['Raycast template'] = '射线模板',
+      ['Ricochet'] = '跳弹',
+      ['Ricochet angle loss'] = '跳弹角度损失',
+      ['Ricochet audio (id)'] = '跳弹音效(ID)',
+      ['Ricochet impact type'] = '跳弹碰撞类型',
+      ['Ricochet spread horizontal (deg)'] = '跳弹水平散布(度)',
+      ['Ricochet spread vertical (deg)'] = '跳弹垂直散布(度)',
+      ['Ricochet threshold angle (deg)'] = '跳弹阈值角度(度)',
+      ['Ricochet threshold speed (m/s)'] = '跳弹阈值速度(米/秒)',
       ['RL-77 Airburst Rocket Launcher'] = 'RL-77 空爆火箭弹发射器',
       ['ROUND 1 BLAST'] = '第 1 发爆炸',
       ['ROUND 1 BLAST RADIUS'] = '第 1 发爆炸半径',
@@ -1387,6 +1409,7 @@ MOD.langs = {
       ['SHRAPNEL DIRECT HIT'] = '破片直击',
       ['SHRAPNEL PROJECTILE'] = '破片弹丸',
       ['SILO'] = '发射井',
+      ['Simulation steps'] = '模拟步数',
       ['SMG'] = '冲锋枪',
       ['SMG-203 Gallant'] = 'SMG-203 英勇无畏',
       ['SMG-32 Reprimand'] = 'SMG-32 训斥',
@@ -1395,6 +1418,8 @@ MOD.langs = {
       ['SMG-72 Pummeler'] = 'SMG-72 暴击斗士',
       ['SMG/FLAM-34 Stoker'] = 'SMG/FLAM-34 司炉者',
       ['SMG/FLAM-34 Stoker (underbarrel flamer)'] = 'SMG/FLAM-34 司炉者（下挂喷火器）',
+      ['Status effect template'] = '状态效果模板',
+      ['Status effect volume'] = '状态效果体积模板',
       ['STRATAGEM'] = '战略配备',
       ['Safe below heat (%)'] = '安全热量(%)',
       ['Sai'] = '钗',
@@ -1502,6 +1527,8 @@ MOD.langs = {
       ['Support weapon drop; the weapon itself is under Support.'] = '支援武器空投；武器本身列在“支援武器”分类下。',
       ['Suppressor'] = '消音器',
       ['Sure?'] = '确定？',
+      ['Surface'] = '碰撞与贴花',
+      ['Surface impact type'] = '表面碰撞类型',
       ['Surviving lethal damage'] = '致命伤害存活',
       ['Sway multiplier'] = '晃动系数',
       ['Sweeper'] = '扫荡者',
@@ -1509,8 +1536,12 @@ MOD.langs = {
       ['TD-110 Maelstrom'] = 'TD-110 风暴漩涡',
       ['TD-220 Bastion MK XVI'] = 'TD-220 堡垒MK XVI',
       ['TED-63 Dynamite'] = 'TED-63 炸药',
+      ['Terrain deformation'] = '弹坑类型',
       ['THROWABLE'] = '投掷物',
+      ['Thruster effect length (s)'] = '推进器特效时长(秒)',
       ['TM-1 Lure Mine'] = 'TM-1 诱饵地雷',
+      ['Trail audio start (id)'] = '尾迹音效起(ID)',
+      ['Trail audio stop (id)'] = '尾迹音效止(ID)',
       ['TX-41 Sterilizer'] = 'TX-41 灭菌器',
       ['Tabs shown'] = '显示的标签页',
       ['Talon'] = '猛爪',
@@ -1606,6 +1637,7 @@ MOD.langs = {
       ['Volatile Plasma Bolt'] = '易气化等离子弹',
       ['W.A.S.P. Launcher'] = 'W.A.S.P.发射器',
       ['WEAPON STATS'] = '武器数值',
+      ['Wind effect template'] = '风效模板',
       ['WIND-UP'] = '预热',
       ['Walk / run speed'] = '行走 / 奔跑速度',
       ['Walk speed (m/s)'] = '步行速度(米/秒)',
@@ -2833,6 +2865,7 @@ MOD.langs = {
       ['+ Stims (start, max)'] = '治療劑數量（初始 / 上限）',
       ['+ Throwables (start, max)'] = '手雷數量（初始 / 上限）',
       ['0 = normal projectile; - / + selects a throwable grenade by name above.'] = '0 = 常規射彈；- / + 按上方名稱選擇投擲手雷。',
+      ['0 for flak and cluster rounds; 1 for every other round in this build.'] = '本版本中僅高射炮彈與集束炸彈為 0，其餘射彈為 1。',
       ['0: hits deal their normal damage, 1: their durable damage (the weapon\'s lower one)'] = '0：命中造成常規傷害；1：造成耐久傷害（取武器兩者中較低的一項）',
       ['100kg Bomb'] = '100KG炸彈',
       ['100kg Bomb Mk2'] = '100KG炸彈MK2',
@@ -3011,8 +3044,10 @@ MOD.langs = {
       ['AR/GL-21 One-Two'] = 'AR/GL-21 雙響',
       ['AR/GL-21 One-Two (grenade launcher)'] = 'AR/GL-21 雙響（下掛榴彈發射器）',
       ['ARC'] = '電弧',
+      ['Arc type'] = '電弧類型',
       ['ARC-12 Blitzer'] = 'ARC-12 閃擊者',
       ['ARC-3 Arc Thrower'] = 'ARC-3 電弧發射器',
+      ['Audio'] = '音效',
       ['AX/AR-23 "Guard Dog"'] = 'AX/AR-23 護衛犬',
       ['AX/ARC-3 "Guard Dog" K-9'] = 'AX/ARC-3 護衛犬 K-9',
       ['AX/FLAM-75 "Guard Dog" Hot Dog'] = 'AX/FLAM-75 護衛犬熱狗',
@@ -3189,6 +3224,7 @@ MOD.langs = {
       ['Cruise speed (m/s)'] = '巡航速度(米/秒)',
       ['DAMAGE'] = '傷害',
       ['DBS-2 Double Freedom'] = 'DBS-2 雙重自由',
+      ['Decal size'] = '投射貼花尺寸',
       ['DEPLOYER'] = '部署艙',
       ['DIRECT HIT'] = '直擊',
       ['Dagger'] = '匕首',
@@ -3230,6 +3266,7 @@ MOD.langs = {
       ['EAT-17 Expendable Anti-Tank (SEAF)'] = 'EAT-17 反坦克消耗品（SEAF）',
       ['EAT-411 Leveller'] = 'EAT-411 夷平者',
       ['EAT-700 Expendable Napalm'] = 'EAT-700 消耗型凝固汽油彈',
+      ['Effects'] = '效果',
       ['EMS Mortar Sentry'] = '電磁干擾哨戒迫擊炮',
       ['EXO-45 Patriot Exosuit'] = 'EXO-45 愛國者外骨骼裝甲',
       ['EXO-49 Emancipator Exosuit'] = 'EXO-49 解放者外骨骼裝甲',
@@ -3279,6 +3316,8 @@ MOD.langs = {
       ['Extra Padding'] = '額外填充',
       ['FAF-14 Spear'] = 'FAF-14 長矛',
       ['FIRE'] = '開火',
+      ['Fire template'] = '火焰模板',
+      ['Flags'] = '標誌位',
       ['FLAM-40 Flamethrower'] = 'FLAM-40 火焰噴射器',
       ['FLAM-66 Torcher'] = 'FLAM-66 噴火者',
       ['Feet First'] = '護腿優先',
@@ -3365,6 +3404,7 @@ MOD.langs = {
       ['Gunner FRV'] = '炮手FRV',
       ['Gunslinger'] = '神槍手',
       ['HANDLING'] = '操控',
+      ['Hit effect damage type'] = '命中效果傷害類型',
       ['HMG Emplacement'] = '重機槍炮台',
       ['Halt'] = '制止者',
       ['Handling'] = '操控',
@@ -3403,6 +3443,7 @@ MOD.langs = {
       ['Impact'] = '衝擊彈',
       ['Impact damage taken'] = '受到衝擊傷害',
       ['Impact explosion (id)'] = '命中爆炸 (ID)',
+      ['Impact flag (+140)'] = '撞擊標誌(+140)',
       ['Incendiary'] = '燃燒彈',
       ['Incendiary Impact'] = '衝擊燃燒彈',
       ['Incinerator FRV'] = '焚燒者FRV',
@@ -3440,6 +3481,7 @@ MOD.langs = {
       ['LAS-98 Laser Cannon (crewed mount)'] = 'LAS-98 雷射大炮（乘員炮座）',
       ['LAS-99 Quasar Cannon'] = 'LAS-99 類星體大砲',
       ['LASER DAMAGE'] = '雷射傷害',
+      ['Lifetime randomness (s)'] = '隨機壽命(秒)',
       ['LIFT-182 Warp Pack'] = 'LIFT-182 傳送背包',
       ['LIFT-850 Jump Pack'] = 'LIFT-850 彈跳背包',
       ['LIFT-860 Hover Pack'] = 'LIFT-860 懸浮背包',
@@ -3507,6 +3549,7 @@ MOD.langs = {
       ['M7S SMG'] = 'M7S 衝鋒槍',
       ['M90A Shotgun'] = 'M90A 霰彈槍',
       ['MA5C Assault Rifle'] = 'MA5C 突擊步槍',
+      ['Max ricochets'] = '最大跳彈數',
       ['MG-206 Heavy Machine Gun'] = 'MG-206 重機槍',
       ['MG-206 Heavy Machine Gun (mounted B)'] = 'MG-206 重機槍（固定式 B）',
       ['MG-43 Machine Gun'] = 'MG-43 機槍',
@@ -3563,6 +3606,7 @@ MOD.langs = {
       ['No changes: loading it puts every value back to the game\'s.'] = '沒有修改：讀取它會把所有數值恢復為遊戲原值。',
       ['No presets yet.'] = '還沒有預設。',
       ['Noise'] = '噪音',
+      ['Noise template'] = '噪音模板',
       ['Normal projectile'] = '常規射彈',
       ['Not offered by the game: a laser built on the Scythe. Settings: Unlock LAS-22 Shear.'] = '遊戲本身未提供：基於「收割者」改造的雷射武器。設定項：解鎖 LAS-22 剪刀。',
       ['Not used by any weapon or stratagem in this list.'] = '本列表中的武器與戰備都沒有用到它。',
@@ -3635,6 +3679,7 @@ MOD.langs = {
       ['PLAS-45 Epoch'] = 'PLAS-45 紀元',
       ['PRESETS'] = '預設',
       ['PROJECTILE'] = '射彈',
+      ['Projectile flags (bits)'] = '射彈標誌位(位域)',
       ['PROJECTILE SWAP'] = '彈種交換',
       ['Pacifier'] = '安撫者',
       ['Panel side'] = '面板位置',
@@ -3683,6 +3728,15 @@ MOD.langs = {
       ['R-63CS Diligence Counter Sniper'] = 'R-63CS 反狙擊勤勉',
       ['R-72 Censor'] = 'R-72 審查官',
       ['R/40-K Hot-Shot Marksman Rifle'] = 'R/40-K 火燙神射手步槍',
+      ['Raycast template'] = '射線模板',
+      ['Ricochet'] = '跳彈',
+      ['Ricochet angle loss'] = '跳彈角度損失',
+      ['Ricochet audio (id)'] = '跳彈音效(ID)',
+      ['Ricochet impact type'] = '跳彈碰撞類型',
+      ['Ricochet spread horizontal (deg)'] = '跳彈水平散佈(度)',
+      ['Ricochet spread vertical (deg)'] = '跳彈垂直散佈(度)',
+      ['Ricochet threshold angle (deg)'] = '跳彈閾值角度(度)',
+      ['Ricochet threshold speed (m/s)'] = '跳彈閾值速度(米/秒)',
       ['RL-77 Airburst Rocket Launcher'] = 'RL-77 空爆火箭發射器',
       ['ROUND 1 BLAST'] = '第 1 發爆炸',
       ['ROUND 1 BLAST RADIUS'] = '第 1 發爆炸半徑',
@@ -3799,6 +3853,7 @@ MOD.langs = {
       ['SHRAPNEL DIRECT HIT'] = '破片直擊',
       ['SHRAPNEL PROJECTILE'] = '破片射彈',
       ['SILO'] = '發射井',
+      ['Simulation steps'] = '模擬步數',
       ['SMG'] = '衝鋒槍',
       ['SMG-203 Gallant'] = 'SMG-203 英勇',
       ['SMG-32 Reprimand'] = 'SMG-32 懲戒',
@@ -3807,6 +3862,8 @@ MOD.langs = {
       ['SMG-72 Pummeler'] = 'SMG-72 猛擊者',
       ['SMG/FLAM-34 Stoker'] = 'SMG/FLAM-34 爆燃者',
       ['SMG/FLAM-34 Stoker (underbarrel flamer)'] = 'SMG/FLAM-34 爆燃者（下掛噴火器）',
+      ['Status effect template'] = '狀態效果模板',
+      ['Status effect volume'] = '狀態效果體積模板',
       ['STRATAGEM'] = '戰略配備',
       ['Safe below heat (%)'] = '安全熱量(%)',
       ['Sai'] = '釵',
@@ -3914,6 +3971,8 @@ MOD.langs = {
       ['Support weapon drop; the weapon itself is under Support.'] = '支援武器空投；武器本身列在「支援武器」分類下。',
       ['Suppressor'] = '消音器',
       ['Sure?'] = '確定？',
+      ['Surface'] = '碰撞與貼花',
+      ['Surface impact type'] = '表面碰撞類型',
       ['Surviving lethal damage'] = '致命傷害存活',
       ['Sway multiplier'] = '晃動係數',
       ['Sweeper'] = '掃蕩者',
@@ -3921,8 +3980,12 @@ MOD.langs = {
       ['TD-110 Maelstrom'] = 'TD-110 風暴渦旋',
       ['TD-220 Bastion MK XVI'] = 'TD-220 堡壘MK XVI',
       ['TED-63 Dynamite'] = 'TED-63 炸藥',
+      ['Terrain deformation'] = '彈坑類型',
       ['THROWABLE'] = '投擲物',
+      ['Thruster effect length (s)'] = '推進器特效時長(秒)',
       ['TM-1 Lure Mine'] = 'TM-1 誘餌地雷',
+      ['Trail audio start (id)'] = '尾跡音效起(ID)',
+      ['Trail audio stop (id)'] = '尾跡音效止(ID)',
       ['TX-41 Sterilizer'] = 'TX-41 滅菌者',
       ['Tabs shown'] = '顯示的標籤頁',
       ['Talon'] = '利爪',
@@ -4018,6 +4081,7 @@ MOD.langs = {
       ['Volatile Plasma Bolt'] = '揮發性電漿彈',
       ['W.A.S.P. Launcher'] = 'W.A.S.P.火箭發射器',
       ['WEAPON STATS'] = '武器數值',
+      ['Wind effect template'] = '風效模板',
       ['WIND-UP'] = '預熱',
       ['Walk / run speed'] = '行走 / 奔跑速度',
       ['Walk speed (m/s)'] = '步行速度(米/秒)',
@@ -5245,6 +5309,7 @@ MOD.langs = {
       ['+ Stims (start, max)'] = '+ Стимы (в начале, макс.)',
       ['+ Throwables (start, max)'] = '+ Метательное (в начале, макс.)',
       ['0 = normal projectile; - / + selects a throwable grenade by name above.'] = '0 = обычный снаряд; - / + выбирает гранату по названию выше.',
+      ['0 for flak and cluster rounds; 1 for every other round in this build.'] = 'В этой сборке 0 только у зенитных и кассетных боеприпасов, у остальных 1.',
       ['0: hits deal their normal damage, 1: their durable damage (the weapon\'s lower one)'] = '0: попадания наносят обычный урон, 1: урон по прочным (меньший у оружия)',
       ['100kg Bomb'] = 'Бомба (100 кг)',
       ['100kg Bomb Mk2'] = 'Бомба Mk2 (100 кг)',
@@ -5423,8 +5488,10 @@ MOD.langs = {
       ['AR/GL-21 One-Two'] = 'AR/GL-21 Двоечка',
       ['AR/GL-21 One-Two (grenade launcher)'] = 'AR/GL-21 Двоечка (гранатомет)',
       ['ARC'] = 'ДУГА',
+      ['Arc type'] = 'Тип дуги',
       ['ARC-12 Blitzer'] = 'ARC-12 «Налетчик»',
       ['ARC-3 Arc Thrower'] = 'ARC-3 «Дуговой метатель»',
+      ['Audio'] = 'Звук',
       ['AX/AR-23 "Guard Dog"'] = 'AX/AR-23 «Сторожевой пес»',
       ['AX/ARC-3 "Guard Dog" K-9'] = 'AX/ARC-3 «Сторожевой пес» K-9',
       ['AX/FLAM-75 "Guard Dog" Hot Dog'] = 'AX/FLAM-75 «Сторожевой пес» Хот-дог',
@@ -5601,6 +5668,7 @@ MOD.langs = {
       ['Cruise speed (m/s)'] = 'Крейсерская скорость (м/с)',
       ['DAMAGE'] = 'УРОН',
       ['DBS-2 Double Freedom'] = 'DBS-2 Двойная свобода',
+      ['Decal size'] = 'Размер декали',
       ['DEPLOYER'] = 'УСТАНОВЩИК',
       ['DIRECT HIT'] = 'ПРЯМОЕ ПОПАДАНИЕ',
       ['Dagger'] = '«Кинжал»',
@@ -5642,6 +5710,7 @@ MOD.langs = {
       ['EAT-17 Expendable Anti-Tank (SEAF)'] = 'EAT-17 «Одноразовый бронебой» (ВССЗ)',
       ['EAT-411 Leveller'] = 'EAT-411 Уравнитель',
       ['EAT-700 Expendable Napalm'] = 'EAT-700 Одноразовый напалм',
+      ['Effects'] = 'Эффекты',
       ['EMS Mortar Sentry'] = '«Турель с ЭМ-минометом»',
       ['EXO-45 Patriot Exosuit'] = 'EXO-45 Экзокостюм «Патриот»',
       ['EXO-49 Emancipator Exosuit'] = 'EXO-49 Экзокостюм «Благодетель»',
@@ -5691,6 +5760,8 @@ MOD.langs = {
       ['Extra Padding'] = 'Экстра-уплотнение',
       ['FAF-14 Spear'] = 'FAF-14 Копье',
       ['FIRE'] = 'ОГОНЬ',
+      ['Fire template'] = 'Шаблон огня',
+      ['Flags'] = 'Флаги',
       ['FLAM-40 Flamethrower'] = 'FLAM-40 «Огнемет»',
       ['FLAM-66 Torcher'] = 'FLAM-66 «Сжигатель»',
       ['Feet First'] = 'Вперед ногами',
@@ -5777,6 +5848,7 @@ MOD.langs = {
       ['Gunner FRV'] = 'МТР «Стрелок»',
       ['Gunslinger'] = 'Стрелок',
       ['HANDLING'] = 'УПРАВЛЕНИЕ',
+      ['Hit effect damage type'] = 'Тип урона эффекта попадания',
       ['HMG Emplacement'] = '«Огневая позиция: тяжелый пулемет»',
       ['Halt'] = 'Стоп',
       ['Handling'] = 'Управление',
@@ -5815,6 +5887,7 @@ MOD.langs = {
       ['Impact'] = '«Ударная»',
       ['Impact damage taken'] = 'Получаемый урон от ударов',
       ['Impact explosion (id)'] = 'Взрыв при попадании (ID)',
+      ['Impact flag (+140)'] = 'Флаг удара (+140)',
       ['Incendiary'] = '«Зажигательная»',
       ['Incendiary Impact'] = 'Зажигательная ударная',
       ['Incinerator FRV'] = 'Огнеметная МТР',
@@ -5852,6 +5925,7 @@ MOD.langs = {
       ['LAS-98 Laser Cannon (crewed mount)'] = 'LAS-98 «Лазерная пушка» (станковая, с расчетом)',
       ['LAS-99 Quasar Cannon'] = 'LAS-99 Пушка «Квазар»',
       ['LASER DAMAGE'] = 'УРОН ЛАЗЕРОМ',
+      ['Lifetime randomness (s)'] = 'Разброс времени жизни (с)',
       ['LIFT-182 Warp Pack'] = 'LIFT-182 Варп-ранец',
       ['LIFT-850 Jump Pack'] = 'LIFT-850 «Реактивный ранец»',
       ['LIFT-860 Hover Pack'] = 'LIFT-860 Ранец для парения',
@@ -5919,6 +5993,7 @@ MOD.langs = {
       ['M7S SMG'] = 'M7S Пистолет-пулемет',
       ['M90A Shotgun'] = 'M90A Дробовик',
       ['MA5C Assault Rifle'] = 'MA5C Штурмовая винтовка',
+      ['Max ricochets'] = 'Макс. рикошетов',
       ['MG-206 Heavy Machine Gun'] = 'MG-206 «Тяжелый пулемет»',
       ['MG-206 Heavy Machine Gun (mounted B)'] = 'MG-206 «Тяжелый пулемет» (станковый B)',
       ['MG-43 Machine Gun'] = 'MG-43 «Пулемет»',
@@ -5975,6 +6050,7 @@ MOD.langs = {
       ['No changes: loading it puts every value back to the game\'s.'] = 'Изменений нет: загрузка вернет все значения игры.',
       ['No presets yet.'] = 'Пресетов пока нет.',
       ['Noise'] = 'Шум',
+      ['Noise template'] = 'Шаблон шума',
       ['Normal projectile'] = 'Обычный снаряд',
       ['Not offered by the game: a laser built on the Scythe. Settings: Unlock LAS-22 Shear.'] = 'Игра его не предлагает: лазер на основе «Косы». Настройки: разблокировать LAS-22 Ножницы.',
       ['Not used by any weapon or stratagem in this list.'] = 'Ни одно оружие или стратагема в этом списке его не использует.',
@@ -6047,6 +6123,7 @@ MOD.langs = {
       ['PLAS-45 Epoch'] = 'PLAS-45 Эпоха',
       ['PRESETS'] = 'ПРЕСЕТЫ',
       ['PROJECTILE'] = 'СНАРЯД',
+      ['Projectile flags (bits)'] = 'Флаги снаряда (биты)',
       ['PROJECTILE SWAP'] = 'ЗАМЕНА СНАРЯДА',
       ['Pacifier'] = 'Усмиритель',
       ['Panel side'] = 'Сторона панели',
@@ -6095,6 +6172,15 @@ MOD.langs = {
       ['R-63CS Diligence Counter Sniper'] = 'R-63CS «Рвение антиснайпер»',
       ['R-72 Censor'] = 'R-72 Цензор',
       ['R/40-K Hot-Shot Marksman Rifle'] = 'R/40-K Марксманская винтовка «Лихач»',
+      ['Raycast template'] = 'Шаблон трассировки',
+      ['Ricochet'] = 'Рикошет',
+      ['Ricochet angle loss'] = 'Потеря угла рикошета',
+      ['Ricochet audio (id)'] = 'Звук рикошета (ID)',
+      ['Ricochet impact type'] = 'Тип рикошета',
+      ['Ricochet spread horizontal (deg)'] = 'Разброс рикошета по горизонтали (град)',
+      ['Ricochet spread vertical (deg)'] = 'Разброс рикошета по вертикали (град)',
+      ['Ricochet threshold angle (deg)'] = 'Порог рикошета, угол (град)',
+      ['Ricochet threshold speed (m/s)'] = 'Порог рикошета, скорость (м/с)',
       ['RL-77 Airburst Rocket Launcher'] = 'RL-77 «Ракетница с подрывом в воздухе»',
       ['ROUND 1 BLAST'] = 'ВЗРЫВ ВЫСТРЕЛА 1',
       ['ROUND 1 BLAST RADIUS'] = 'РАДИУС ВЗРЫВА ВЫСТРЕЛА 1',
@@ -6211,6 +6297,7 @@ MOD.langs = {
       ['SHRAPNEL DIRECT HIT'] = 'ПРЯМОЕ ПОПАДАНИЕ ОСКОЛКОВ',
       ['SHRAPNEL PROJECTILE'] = 'СНАРЯД ОСКОЛКОВ',
       ['SILO'] = 'ШАХТА',
+      ['Simulation steps'] = 'Шагов симуляции',
       ['SMG'] = 'ПИСТОЛЕТ-ПУЛЕМЕТ',
       ['SMG-203 Gallant'] = 'SMG-203 «Кавалер»',
       ['SMG-32 Reprimand'] = 'SMG-32 Взыскание',
@@ -6219,6 +6306,8 @@ MOD.langs = {
       ['SMG-72 Pummeler'] = 'SMG-72 «Трамбовщик»',
       ['SMG/FLAM-34 Stoker'] = 'SMG/FLAM-34 Топка',
       ['SMG/FLAM-34 Stoker (underbarrel flamer)'] = 'SMG/FLAM-34 Топка (подствольный огнемет)',
+      ['Status effect template'] = 'Шаблон статус-эффекта',
+      ['Status effect volume'] = 'Объём статус-эффекта',
       ['STRATAGEM'] = 'СТРАТАГЕМА',
       ['Safe below heat (%)'] = 'Безопасно ниже нагрева (%)',
       ['Sai'] = 'Сай',
@@ -6326,6 +6415,8 @@ MOD.langs = {
       ['Support weapon drop; the weapon itself is under Support.'] = 'Сброс оружия поддержки; само оружие — во вкладке «Поддержка».',
       ['Suppressor'] = 'Подавитель',
       ['Sure?'] = 'Уверены?',
+      ['Surface'] = 'Удар и декаль',
+      ['Surface impact type'] = 'Тип удара о поверхность',
       ['Surviving lethal damage'] = 'Выживание при смертельном уроне',
       ['Sway multiplier'] = 'Множитель колебания',
       ['Sweeper'] = 'Чистильщик',
@@ -6333,8 +6424,12 @@ MOD.langs = {
       ['TD-110 Maelstrom'] = 'TD-110 Водоворот',
       ['TD-220 Bastion MK XVI'] = 'TD-220 Mk-XVI «БАСТИОН»',
       ['TED-63 Dynamite'] = 'TED-63 Динамит',
+      ['Terrain deformation'] = 'Деформация грунта',
       ['THROWABLE'] = 'МЕТАТЕЛЬНОЕ',
+      ['Thruster effect length (s)'] = 'Длина эффекта двигателя (с)',
       ['TM-1 Lure Mine'] = 'TM-1 Мина-приманка',
+      ['Trail audio start (id)'] = 'Звук следа, начало (ID)',
+      ['Trail audio stop (id)'] = 'Звук следа, конец (ID)',
       ['TX-41 Sterilizer'] = 'TX-41 Стерилизатор',
       ['Tabs shown'] = 'Показывать вкладки',
       ['Talon'] = 'Коготь',
@@ -6430,6 +6525,7 @@ MOD.langs = {
       ['Volatile Plasma Bolt'] = 'Заряд нестабильной плазмы',
       ['W.A.S.P. Launcher'] = 'Ракетомет W.A.S.P.',
       ['WEAPON STATS'] = 'ХАРАКТЕРИСТИКИ ОРУЖИЯ',
+      ['Wind effect template'] = 'Шаблон ветра',
       ['WIND-UP'] = 'РАСКРУТКА',
       ['Walk / run speed'] = 'Скорость ходьбы / бега',
       ['Walk speed (m/s)'] = 'Скорость шага (м/с)',
@@ -8545,6 +8641,16 @@ local function read_field(f)
         b = b and b:byte()
         return b and b <= 1 and b or nil
     end
+    if f.storage == 'u16' then   -- a little-endian half word (a projectile's +244 flags, as one number)
+        local half = api.read(entry.copies[1] + HEADER_BYTES + f.offset, 2)
+        if not half or #half < 2 then return nil end
+        return half:byte(1) + half:byte(2) * 256
+    end
+    if f.storage == 'u8' then   -- a one-byte value (an explosion's enum field, one byte wide)
+        local b = api.read(entry.copies[1] + HEADER_BYTES + f.offset, 1)
+        b = b and b:byte()
+        return b and b <= (f.limit or 255) and b or nil
+    end
     local bits = peek4(entry.copies[1] + HEADER_BYTES + f.offset)
     if not bits then return nil end
     local value = bits
@@ -8557,6 +8663,11 @@ local function encode(f, value)
     if f.storage == 'grenade' then return KINDS[TYPES.throwable].entity_bytes(value) end
     if f.storage == 'f32' then return f32_bytes(value) end
     if f.storage == 'flag' then return value >= 0.5 and string.char(1) or string.char(0) end
+    if f.storage == 'u8' then return string.char(math.floor(value + 0.5) % 256) end
+    if f.storage == 'u16' then
+        local v = math.floor(value + 0.5) % 65536
+        return string.char(v % 256, math.floor(v / 256))
+    end
     return u32_bytes(math.floor(value + 0.5))
 end
 
@@ -9358,6 +9469,12 @@ local function resolve_gun(weapon, key)
             proj('gravity', 'Gravity factor', 44, 100, 0.05, 0.5)
         end
         proj('pen_slowdown', 'Penetration slowdown', 64, 100, 0.05, 0.25)
+        add_row(weapon, section, idp .. 'steps', 'Simulation steps', 'u32',
+                { part(idp .. 'steps', T_PROJECTILE, p + 48, 'u32', 1000) }, 1, 20, 1, 1)
+        proj('lifetime', 'Lifetime (s)', 52, 600, 0.1, 1)
+        proj('lifetime_random', 'Lifetime randomness (s)', 56, 100, 0.05, 0.5)
+        add_row(weapon, section, idp .. 'max_ricochets', 'Max ricochets', 'u32',
+                { part(idp .. 'max_ricochets', T_PROJECTILE, p + 180, 'u32', 1000) }, 0, 40, 1, 5)
         local impact = read_field(field_at(T_PROJECTILE, p + 144, 'u32', 100000))
         local expiry = read_field(field_at(T_PROJECTILE, p + 156, 'u32', 100000))
         -- the explosions it sets off, as choices (+144 on impact, +156 on expiry; 0: none), and its fuse: above 0
@@ -11195,8 +11312,8 @@ function MOD.records.rows(page)
     local kind, at = page.kind, tables[page.kind] and tables[page.kind].index[page.id]
     page.rows, page.by_id = {}, {}
     if not at then return end
-    local function num(section, id, label, off, storage, max, small, big)
-        add_row(page, section, id, label, storage, { part(id, kind, at + off, storage, 100000) }, 0, max, small, big)
+    local function num(section, id, label, off, storage, max, small, big, lim)
+        add_row(page, section, id, label, storage, { part(id, kind, at + off, storage, lim or 100000) }, 0, max, small, big)
     end
     local function hurt(off, section, what, count)
         local d = read_field(field_at(kind, at + off, 'u32', 100000))
@@ -11206,14 +11323,20 @@ function MOD.records.rows(page)
         if count == nil then status_rows(page, section, '', drow, what == 'Explosion' and 'blast' or 'hit') end
     end
     if kind == T_PROJECTILE then
+        -- the round's flight: the ProjectileInfo members the game's own data names
         for _, r in ipairs({ { 'calibre', 'Calibre (mm)', 24, 'f32', 1000, 0.1, 1 }, { 'pellets', 'Projectiles per shot', 28, 'u32', 200, 1, 5 },
-                             { 'velocity', 'Velocity (m/s)', 32, 'f32', 100000, 10, 100 }, { 'mass', 'Mass (kg)', 36, 'f32', 10000, 0.1, 1 },
+                             { 'mass', 'Mass (kg)', 36, 'f32', 10000, 0.1, 1 }, { 'velocity', 'Velocity (m/s)', 32, 'f32', 100000, 10, 100 },
                              { 'drag', 'Drag factor', 40, 'f32', 100, 0.05, 0.5 }, { 'gravity', 'Gravity factor', 44, 'f32', 100, 0.05, 0.5 },
-                             { 'lifetime', 'Lifetime (s)', 56, 'f32', 1000, 0.1, 1 },
-                             { 'pen_slowdown', 'Penetration slowdown', 64, 'f32', 100, 0.05, 0.25 } }) do
+                             { 'steps', 'Simulation steps', 48, 'u32', 20, 1, 1 },
+                             { 'lifetime', 'Lifetime (s)', 52, 'f32', 1000, 0.1, 1 },
+                             { 'lifetime_random', 'Lifetime randomness (s)', 56, 'f32', 100, 0.05, 0.5 } }) do
             num('Projectile', r[1], r[2], r[3], r[4], r[5], r[6], r[7])
         end
         hurt(60, 'Damage')
+        num('Damage', 'pen_slowdown', 'Penetration slowdown', 64, 'f32', 100, 0.05, 0.25)
+        -- the angle it goes off at, then the blasts it can set off: on impact (+144), this close to a target
+        -- (+148, a flak fuse), this long after a hit (+152), on expiry (+156), and how far it must fly first
+        num('Explosion id', 'blast_angle', 'Blast angle (deg)', 136, 'f32', 180, 1, 10)
         local impact = add_row(page, 'Explosion id', 'impact_explosion', 'Impact explosion (id)', 'u32',
                                { part('impact_explosion', kind, at + 144, 'u32', 100000) }, 0, 100000, 1, 10)
         impact.choice = 'explosion'
@@ -11226,7 +11349,42 @@ function MOD.records.rows(page)
                                { part('expiry_explosion', kind, at + 156, 'u32', 100000) }, 0, 100000, 1, 10)
         expiry.choice = 'explosion'
         num('Explosion id', 'arming', 'Arming distance (m)', 160, 'f32', 200, 0.1, 1)
-        num('Explosion id', 'blast_angle', 'Blast angle (deg)', 136, 'f32', 180, 1, 10)
+        -- what it does to a surface it hits: its decal, its two impact effects, the byte that stops it there,
+        -- and how long its thruster effect lasts
+        num('Surface', 'decal', 'Decal size', 168, 'f32', 20, 0.1, 1)
+        num('Surface', 'surface_impact', 'Surface impact type', 172, 'u32', 200, 1, 5)
+        num('Surface', 'ricochet_impact', 'Ricochet impact type', 176, 'u32', 200, 1, 5)
+        local flag = add_row(page, 'Surface', 'impact_flag', 'Impact flag (+140)', 'flag',
+                             { part('impact_flag', kind, at + 140, 'flag', 1) }, 0, 1, 1, 1)
+        flag.after = { '0 for flak and cluster rounds; 1 for every other round in this build.' }
+        flag.after_h = #flag.after * 16 + 6
+        num('Surface', 'thruster', 'Thruster effect length (s)', 88, 'f32', 60, 0.05, 0.5)
+        -- when it ricochets instead of stopping
+        num('Ricochet', 'max_ricochets', 'Max ricochets', 180, 'u32', 40, 1, 5)
+        num('Ricochet', 'ricochet_angle', 'Ricochet threshold angle (deg)', 184, 'f32', 180, 1, 10)
+        num('Ricochet', 'ricochet_speed', 'Ricochet threshold speed (m/s)', 188, 'f32', 2000, 1, 10)
+        num('Ricochet', 'ricochet_loss', 'Ricochet angle loss', 192, 'f32', 10, 0.05, 0.25)
+        num('Ricochet', 'ricochet_vertical', 'Ricochet spread vertical (deg)', 196, 'f32', 180, 1, 5)
+        num('Ricochet', 'ricochet_horizontal', 'Ricochet spread horizontal (deg)', 200, 'f32', 180, 1, 5)
+        -- the effects it draws and leaves behind
+        num('Effects', 'hit_effect', 'Hit effect damage type', 236, 'u32', 60, 1, 5)
+        num('Effects', 'fire_template', 'Fire template', 240, 'u32', 60, 1, 5)
+        num('Effects', 'status_volume', 'Status effect volume', 232, 'u32', 60, 1, 5)
+        num('Effects', 'raycast', 'Raycast template', 248, 'u32', 60, 1, 5)
+        -- its audio events: 32-bit event hashes, so any 32-bit value is a legitimate id
+        num('Audio', 'audio_ricochet', 'Ricochet audio (id)', 208, 'u32', 4294967295, 1, 10, 4294967295)
+        num('Audio', 'audio_trail_start', 'Trail audio start (id)', 212, 'u32', 4294967295, 1, 10, 4294967295)
+        num('Audio', 'audio_trail_stop', 'Trail audio stop (id)', 216, 'u32', 4294967295, 1, 10, 4294967295)
+        -- its +244 half word (13 flag bits in this build): the number, then the two bits that have a name
+        num('Flags', 'flags', 'Projectile flags (bits)', 244, 'u16', 65535, 1, 64)
+        for _, b in ipairs({ { 0, 'Inherit velocity', '1: the round keeps the velocity of whoever fired it; 0: it starts from rest.' },
+                             { 5, 'Explosions inherit velocity',
+                               '1: the blast this round sets off travels with it; 0: it stays where the round hit.' } }) do
+            local bitrow = add_row(page, 'Flags', 'flag_' .. b[1], b[2], 'bit',
+                                   { { id = 'flag_' .. b[1], field = field_at(kind, at + 244, 'bit', 1, b[1]) } }, 0, 1, 1, 1)
+            bitrow.after = { b[3] }
+            bitrow.after_h = #bitrow.after * 16 + 6
+        end
     elseif kind == T_EXPLOSION then
         hurt(4, 'Explosion', 'Explosion')
         for _, r in ipairs({ { 'inner', 'Inner radius (m)', 16 }, { 'outer', 'Outer radius (m)', 20 },
@@ -11235,6 +11393,15 @@ function MOD.records.rows(page)
         end
         num('Shape', 'cone', 'Cone angle (deg)', 28, 'f32', 360, 1, 10)
         num('Shape', 'shake', 'Camera shake radius (m)', 32, 'f32', 200, 0.1, 1)
+        -- what it leaves on the ground and what it does to what it hits (enum fields, one number each)
+        num('Effects', 'terrain', 'Terrain deformation', 68, 'u8', 40, 1, 5, 40)
+        num('Effects', 'surface', 'Surface impact type', 72, 'u32', 200, 1, 5)
+        num('Effects', 'hit_effect', 'Hit effect damage type', 76, 'u32', 60, 1, 5)
+        num('Effects', 'noise', 'Noise template', 88, 'u8', 40, 1, 5, 40)
+        num('Effects', 'wind', 'Wind effect template', 92, 'u32', 60, 1, 5)
+        num('Effects', 'fire', 'Fire template', 96, 'u32', 60, 1, 5)
+        num('Effects', 'status', 'Status effect template', 100, 'u32', 60, 1, 5)
+        num('Effects', 'arc', 'Arc type', 120, 'u32', 60, 1, 5)
         MOD.records.shrapnel_rows(page, 'Shrapnel', 'shrapnel', at)
     else
         local name = MOD.records.name(kind, page.id) or 'Status'
@@ -11464,6 +11631,23 @@ do
     end
     if MOD.offline then   -- for the host's own text and fonts
         state.tr = function(v) return settings.tr(v) end
+state.row_value = function(row, default) return row_value(row, default) end
+-- the record pages, for the headless tests: one page of a kind ('projectile', 'explosion', 'status') by id,
+state.records_page = function(what, id)
+    local kind = what == 'explosion' and T_EXPLOSION or (what == 'status' and T_STATUS or T_PROJECTILE)
+    local ok, page = pcall(MOD.records.page, kind, id)
+    return ok and page or nil
+end
+-- every record page of a kind, in id order (the same rows the panel draws for each)
+state.records_all = function(what)
+    local kind = what == 'explosion' and T_EXPLOSION or (what == 'status' and T_STATUS or T_PROJECTILE)
+    local list = {}
+    for _, id in ipairs(MOD.records.ids(kind)) do
+        local ok, page = pcall(MOD.records.page, kind, id)
+        if ok and page then list[#list + 1] = page end
+    end
+    return list
+end
         state.lang = function() return settings.lang end
         state.updates = function() return settings.updates end   -- the host's updater: 'ask' or 'auto'
         state.update_channel = function() return settings.update_channel end   -- 'releases' or 'commits'
@@ -13437,13 +13621,13 @@ local function draw(width, height)
                 else
                     text(fmt(value, row.storage), 780 + shift, y + bh / 2 - 8, 17, changed and GOLD or WHITE, 84, true)
                 end
+                region('row:' .. n, x0 - 6, y - 1, W - x0 - 10, pitch - 1)
                 local ok = value ~= nil
                 button('dec_big:' .. n, '--', 790 + shift, y, 40, bh, ok)
                 button('dec:' .. n, '-', 834 + shift, y, 36, bh, ok)
                 button('inc:' .. n, '+', 874 + shift, y, 36, bh, ok)
                 button('inc_big:' .. n, '++', 914 + shift, y, 40, bh, ok)
                 button('reset:' .. n, 'R', 958 + shift, y, 26, bh, changed)
-                region('row:' .. n, x0 - 6, y - 1, W - x0 - 10, pitch - 1)
                 region('value:' .. n, 696 + shift, y, 88, bh, ok)
                 y = y + pitch
                 for k, line in ipairs(row.after or {}) do text(line, x0, y + 2 + (k - 1) * 16, 14, MUTED, W - x0 - 20) end
@@ -13469,16 +13653,16 @@ local function draw(width, height)
             ui.last_page = last_page
             local th = math.max(24, math.min(len, len * shown / total))
             local ty = top + (len - th) * math.min(1, (ui.scroll - 1) / span)
-            rect(989, top, 5, len, color(28, 34, 42), 951)
+            rect(989 + shift, top, 5, len, color(28, 34, 42), 951)
             local hot = (ui.drag and ui.drag.bar == 'sbar') or ui.hover == 'sbar:thumb'
-            rect(989, ty, 5, th, hot and GOLD or color(110, 124, 138), 952)
-            region('sbar:track', 986, top, 12, len)
-            region('sbar:thumb', 986, ty, 12, th)
+            rect(989 + shift, ty, 5, th, hot and GOLD or color(110, 124, 138), 952)
+            region('sbar:track', 986 + shift, top, 12, len)
+            region('sbar:thumb', 986 + shift, ty, 12, th)
             ui.sbar = { id = 'scroll', top = height - oy - top * s, bottom = height - oy - (top + len) * s,
                         thumb_top = height - oy - ty * s, thumb = th * s, span = span }
             text(string.format('rows %d-%d of %d', ui.scroll, ui.last_visible, #weapon.rows), x0, bottom + 12, 15, MUTED)
-            button('scroll:up', 'Up', 790, bottom + 6, 80, 26, ui.scroll > 1)
-            button('scroll:down', 'Down', 874, bottom + 6, 80, 26, ui.last_visible < #weapon.rows)
+            button('scroll:up', 'Up', 790 + shift, bottom + 6, 80, 26, ui.scroll > 1)
+            button('scroll:down', 'Down', 874 + shift, bottom + 6, 80, 26, ui.last_visible < #weapon.rows)
         end
         if stack_list then
             y = (scrolling and bottom + 36 or y) + 12
@@ -15583,3 +15767,12 @@ if type(hub) ~= 'table' or hub.version ~= HUB_VERSION then
 end
 hub.register({ name = MOD.title, searching = searching, wants = wants, handle = handle_table,
                after_pass = after_pass })
+
+-- for the headless tests: what the last drawn frame laid out, in the order a click is tested (last first)
+do
+    local S = rawget(_G, 'ShodanStatEditor')
+    if type(S) == 'table' then
+        S.regions = function() return ui.regions end
+        S.open_panel = function(v) return open_panel(v) end
+    end
+end
