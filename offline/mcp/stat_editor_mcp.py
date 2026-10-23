@@ -1735,7 +1735,9 @@ def main(argv):
         os.environ['SHODAN_EDITOR_DIR'] = options['panel']
     as_json = options['json']
     command, arguments = rest[0], rest[1:]
-    session = Session()
+    # --game has to reach the folder the session opens: without it every write lands in whatever
+    # install the launcher recorded, which is the live game folder
+    session = Session(options['game'])
     try:
         game = session.game()
     except RuntimeError as why:
